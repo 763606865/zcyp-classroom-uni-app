@@ -1,0 +1,34 @@
+import { request } from '../services/http.uts'
+import type { JobPreview, TalentPreview, PageResult } from '../types/discovery.uts'
+
+function parseJobPage(data : any | null) : PageResult<JobPreview> {
+	const result = JSON.parse<PageResult<JobPreview>>(JSON.stringify(data))
+	if (result == null) throw new Error('职位列表解析失败')
+	return result!
+}
+
+function parseTalentPage(data : any | null) : PageResult<TalentPreview> {
+	const result = JSON.parse<PageResult<TalentPreview>>(JSON.stringify(data))
+	if (result == null) throw new Error('牛人列表解析失败')
+	return result!
+}
+
+export function getRecommendedJobs(query : UTSJSONObject) : Promise<PageResult<JobPreview>> {
+	return request<UTSJSONObject>('/rc/talent/jobs/recommend', 'GET', query, false)
+		.then((data : UTSJSONObject) : PageResult<JobPreview> => parseJobPage(data))
+}
+
+export function searchJobs(query : UTSJSONObject) : Promise<PageResult<JobPreview>> {
+	return request<UTSJSONObject>('/rc/talent/jobs', 'GET', query)
+		.then((data : UTSJSONObject) : PageResult<JobPreview> => parseJobPage(data))
+}
+
+export function getRecommendedTalents(query : UTSJSONObject) : Promise<PageResult<TalentPreview>> {
+	return request<UTSJSONObject>('/rc/talent/resumes/recommend', 'GET', query)
+		.then((data : UTSJSONObject) : PageResult<TalentPreview> => parseTalentPage(data))
+}
+
+export function searchTalents(query : UTSJSONObject) : Promise<PageResult<TalentPreview>> {
+	return request<UTSJSONObject>('/rc/talent/resumes', 'GET', query)
+		.then((data : UTSJSONObject) : PageResult<TalentPreview> => parseTalentPage(data))
+}

@@ -1,0 +1,62 @@
+export type SimpleCompany = {
+	id : number
+	name : string
+}
+
+export type SimplePosition = {
+	code : string
+	name : string
+}
+
+export type JobPreview = {
+	id : number
+	company_id : number
+	title : string
+	employment_type : number
+	employment_type_label : string | null
+	city_code : string | null
+	workplace : string | null
+	salary_min : string | null
+	salary_max : string | null
+	salary_unit : number | null
+	salary_unit_label : string | null
+	experience_min : number | null
+	experience_max : number | null
+	education_level : number | null
+	education_level_label : string | null
+	status : number
+	published_at : string | null
+	keywords : string[]
+	company : SimpleCompany | null
+	position : SimplePosition | null
+}
+
+export type TalentPreview = {
+	id : number
+	resume_no : string
+	title : string
+	full_name : string
+	avatar : string | null
+	display_avatar : string | null
+	gender : number
+	age : number | null
+	work_years : number | null
+	highest_education_level : number | null
+	is_fresh_graduate : number
+	expected_salary_min : string | null
+	expected_salary_max : string | null
+	expected_salary_unit : number | null
+	current_city_code : string | null
+	current_residence_city : string | null
+	is_primary : number
+	status : number
+	updated_at : string | null
+}
+
+export type PageResult<T> = {
+	data : T[]
+	total : number
+	per_page : number
+	current_page : number
+	last_page : number
+}

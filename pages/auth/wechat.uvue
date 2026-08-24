@@ -1,0 +1,283 @@
+<template>
+	<scroll-view class="login-page" scroll-y>
+		<view class="login-header">
+			<view class="brand"><text class="brand-text">微</text></view>
+			<text class="title">微信授权登录</text>
+			<text class="subtitle">首次授权将自动注册账号，需获取手机号用于身份识别</text>
+		</view>
+
+		<!-- #ifdef MP-WEIXIN -->
+		<view class="login-card">
+			<view class="avatar-row">
+				<button class="avatar-picker" open-type="chooseAvatar" @chooseavatar="onChooseAvatar">
+					<image v-if="avatarPath != ''" class="avatar-preview" :src="avatarPath" mode="aspectFill" />
+					<text v-else class="avatar-placeholder">选择头像</text>
+				</button>
+				<text class="avatar-tip">可选，用于展示你的头像</text>
+			</view>
+
+			<input
+				v-model="nickname"
+				class="field"
+				type="nickname"
+				placeholder="选填，微信昵称"
+			/>
+
+			<view class="agreement" @click="agreed = !agreed">
+				<view class="checkbox" :class="{ checked: agreed }">
+					<text v-if="agreed" class="checkbox-mark">✓</text>
+				</view>
+				<text class="agreement-text">我已阅读并同意《用户协议》和《隐私政策》</text>
+			</view>
+
+			<button
+				class="login-button"
+				:loading="submitting"
+				:disabled="submitting || !agreed"
+				open-type="getPhoneNumber"
+				@getphonenumber="onGetPhoneNumber"
+			>
+				手机号一键登录
+			</button>
+			<text class="hint">点击按钮将同时完成微信授权与手机号验证</text>
+		</view>
+		<!-- #endif -->
+
+		<!-- #ifdef APP-ANDROID || APP-IOS -->
+		<view class="login-card">
+			<view class="agreement" @click="agreed = !agreed">
+				<view class="checkbox" :class="{ checked: agreed }">
+					<text v-if="agreed" class="checkbox-mark">✓</text>
+				</view>
+				<text class="agreement-text">我已阅读并同意《用户协议》和《隐私政策》</text>
+			</view>
+
+			<button class="login-button" :loading="submitting" :disabled="submitting || !agreed" @click="startAppWechatLogin">
+				微信登录
+			</button>
+			<text class="hint">若该微信账号尚未绑定手机号，登录后需补充验证手机号</text>
+		</view>
+		<!-- #endif -->
+
+		<!-- #ifndef MP-WEIXIN || APP-ANDROID || APP-IOS -->
+		<view class="login-card">
+			<text class="hint">当前平台暂不支持微信登录，请使用手机号 / 邮箱登录</text>
+		</view>
+		<!-- #endif -->
+	</scroll-view>
+</template>
+
+<script setup lang="uts">
+	import { wechatMiniLogin, wechatAppLogin } from '../../api/auth.uts'
+	import { uploadAvatar } from '../../api/upload.uts'
+	import { setSession } from '../../stores/auth.uts'
+	import { requestLocationAfterLogin } from '../../utils/location.uts'
+	import type { LoginResult, WechatAppLoginResult } from '../../types/auth.uts'
+
+	const agreed = ref(false)
+	const submitting = ref(false)
+	const nickname = ref('')
+	const avatarPath = ref('')
+	let redirect = '/pages/jobs/index'
+
+	onLoad((options : UTSJSONObject) => {
+		const redirectValue = options['redirect'] as string | null
+		if (redirectValue != null && redirectValue != '') {
+			const decoded = decodeURIComponent(redirectValue)
+			if (decoded != null) redirect = decoded
+		}
+	})
+
+	function showError(message : string) {
+		uni.showToast({ title: message, icon: 'none' })
+	}
+
+	function errorMessage(error : any | null, fallback : string) : string {
+		if (error == null) return fallback
+		const cause = error as Error
+		if (cause.message == '') return fallback
+		return cause.message
+	}
+
+	// 通过 JSON 往返把任意对象拍平成 UTSJSONObject，避免依赖具体平台生成的强类型定义。
+	function toPlainObject(source : any) : UTSJSONObject {
+		const text = JSON.stringify(source)
+		if (text == null || text == '') return {} as UTSJSONObject
+		const parsed = JSON.parse(text)
+		if (parsed == null) return {} as UTSJSONObject
+		return parsed as UTSJSONObject
+	}
+
+	// 组件事件（chooseavatar / getphonenumber）的数据挂在 e.detail 上。
+	function eventDetail(e : any) : UTSJSONObject {
+		const detail = toPlainObject(e)['detail']
+		if (detail == null) return {} as UTSJSONObject
+		return detail as UTSJSONObject
+	}
+
+	function finishLogin(result : LoginResult) {
+		setSession(result)
+		requestLocationAfterLogin()
+		uni.showToast({ title: '登录成功', icon: 'success' })
+		setTimeout(() => {
+			uni.reLaunch({ url: redirect })
+		}, 300)
+	}
+
+	// #ifdef MP-WEIXIN
+	function onChooseAvatar(e : any) {
+		const detail = eventDetail(e)
+		const url = detail['avatarUrl'] as string | null
+		if (url != null && url != '') avatarPath.value = url!
+	}
+
+	function onGetPhoneNumber(e : any) {
+		if (!agreed.value) {
+			showError('请先同意用户协议和隐私政策')
+			return
+		}
+		const detail = eventDetail(e)
+		const phoneCode = detail['code'] as string | null
+		if (phoneCode == null || phoneCode == '') {
+			showError('未获取到手机号授权，请重试')
+			return
+		}
+
+		submitting.value = true
+		uni.login({
+			provider: 'weixin',
+			success: (loginRes) => {
+				const loginCode = loginRes.code
+				uploadIfNeeded().then((avatarUrl : string | null) => {
+					return wechatMiniLogin(loginCode, phoneCode!, nickname.value == '' ? null : nickname.value, avatarUrl)
+				}).then((result) => {
+					finishLogin(result)
+					submitting.value = false
+				}).catch((error : any | null) => {
+					showError(errorMessage(error, '登录失败'))
+					submitting.value = false
+				})
+			},
+			fail: () => {
+				showError('微信授权失败，请重试')
+				submitting.value = false
+			}
+		})
+	}
+
+	function uploadIfNeeded() : Promise<string | null> {
+		if (avatarPath.value == '') return Promise.resolve(null)
+		return uploadAvatar(avatarPath.value).then((url : string) : string | null => url).catch(() : string | null => null)
+	}
+	// #endif
+
+	// #ifdef APP-ANDROID || APP-IOS
+	// uni.login 的 onlyAuthorize 模式在部分平台版本下把 code 放在顶层，部分放在 authResult 里，
+	// 这里做兼容处理。
+	function extractAppLoginCode(loginRes : any) : string {
+		const obj = toPlainObject(loginRes)
+		const direct = obj['code'] as string | null
+		if (direct != null && direct != '') return direct!
+		const authResult = obj['authResult']
+		if (authResult == null) return ''
+		const nested = (authResult as UTSJSONObject)['code'] as string | null
+		return nested == null ? '' : nested!
+	}
+
+	// 微信自 2022 年起对新授权返回的用户资料做了隐私限制，未必能拿到真实昵称/头像，
+	// 拿不到时静默跳过，不影响登录主流程。
+	function fetchAppProfile() : Promise<UTSJSONObject> {
+		return new Promise<UTSJSONObject>((resolve) => {
+			uni.getUserInfo({
+				provider: 'weixin',
+				success: (res) => {
+					const userInfo = toPlainObject(res)['userInfo']
+					resolve(userInfo == null ? ({} as UTSJSONObject) : (userInfo as UTSJSONObject))
+				},
+				fail: () => {
+					resolve({} as UTSJSONObject)
+				}
+			})
+		})
+	}
+
+	function handleAppLoginResult(result : WechatAppLoginResult) {
+		if (result.status == 'need_phone') {
+			submitting.value = false
+			const pendingToken = result.pending_token == null ? '' : result.pending_token!
+			uni.redirectTo({
+				url: `/pages/auth/bind-phone?pending_token=${encodeURIComponent(pendingToken)}&redirect=${encodeURIComponent(redirect)}`
+			})
+			return
+		}
+		if (result.user == null || result.access_token == null) {
+			showError('登录响应缺少必要字段')
+			submitting.value = false
+			return
+		}
+		finishLogin({
+			token_type: result.token_type == null ? 'Bearer' : result.token_type!,
+			access_token: result.access_token!,
+			user: result.user!
+		})
+		submitting.value = false
+	}
+
+	function startAppWechatLogin() {
+		if (!agreed.value) {
+			showError('请先同意用户协议和隐私政策')
+			return
+		}
+		submitting.value = true
+		uni.login({
+			provider: 'weixin',
+			onlyAuthorize: true,
+				success: (loginRes) => {
+				const code = extractAppLoginCode(loginRes)
+				if (code == '') {
+					showError('未获取到微信授权信息，请重试')
+					submitting.value = false
+					return
+				}
+				fetchAppProfile().then((profile : UTSJSONObject) => {
+					const profileNickname = profile['nickName'] as string | null
+					const profileAvatar = profile['avatarUrl'] as string | null
+					wechatAppLogin(code, profileNickname, profileAvatar).then((result : WechatAppLoginResult) => {
+						handleAppLoginResult(result)
+					}).catch((error : any | null) => {
+						showError(errorMessage(error, '登录失败'))
+						submitting.value = false
+					})
+				})
+			},
+			fail: () => {
+				showError('微信授权失败，请确认已安装微信客户端')
+				submitting.value = false
+			}
+		})
+	}
+	// #endif
+</script>
+
+<style scoped>
+	.login-page { flex: 1; background-color: #f3fbf7; }
+	.login-header { padding: 70px 28px 28px; align-items: center; }
+	.brand { width: 64px; height: 64px; border-radius: 20px; align-items: center; justify-content: center; background-color: #19a974; }
+	.brand-text { color: #fff; font-size: 27px; font-weight: 700; }
+	.title { margin-top: 20px; font-size: 24px; font-weight: 700; }
+	.subtitle { margin-top: 8px; color: #7b8680; font-size: 13px; text-align: center; }
+	.login-card { margin: 0 20px; padding: 24px; border-radius: 18px; background-color: #fff; }
+	.avatar-row { align-items: center; margin-bottom: 18px; }
+	.avatar-picker { width: 72px; height: 72px; padding: 0; border-radius: 36px; background-color: #f6f7f9; align-items: center; justify-content: center; overflow: hidden; }
+	.avatar-preview { width: 72px; height: 72px; border-radius: 36px; }
+	.avatar-placeholder { font-size: 12px; color: #8a9099; }
+	.avatar-tip { margin-top: 8px; font-size: 11px; color: #9aa1a8; }
+	.field { height: 48px; padding: 0 14px; border-radius: 10px; background-color: #f6f7f9; font-size: 15px; margin-bottom: 14px; }
+	.login-button { margin-top: 8px; height: 48px; line-height: 48px; border-radius: 12px; background-color: #19a974; color: #fff; font-size: 16px; font-weight: 600; }
+	.hint { margin-top: 12px; font-size: 11px; color: #9aa1a8; text-align: center; }
+	.agreement { margin: 6px 0 18px; flex-direction: row; align-items: center; justify-content: center; }
+	.checkbox { width: 16px; height: 16px; border: 1px solid #c6ccd2; border-radius: 4px; align-items: center; justify-content: center; }
+	.checkbox-mark { color: #fff; font-size: 11px; }
+	.checked { background-color: #19a974; border-color: #19a974; }
+	.agreement-text { margin-left: 7px; font-size: 11px; color: #7b8188; }
+</style>

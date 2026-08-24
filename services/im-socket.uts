@@ -1,0 +1,59 @@
+import { IM_BASE_URL } from '../config/env.uts'
+
+export type ImSocketCallbacks = {
+	onConnected : () => void
+	onMessage : (payload : any) => void
+	onError : (message : string) => void
+	onClosed : () => void
+}
+
+let socketTask : SocketTask | null = null
+
+export function connectImSocket(token : string, callbacks : ImSocketCallbacks) {
+	closeImSocket()
+	const url = `${IM_BASE_URL}/im/connect?token=${encodeURIComponent(token)}`
+	socketTask = uni.connectSocket({ url: url })
+	socketTask!.onOpen(() => callbacks.onConnected())
+	socketTask!.onMessage((event) => {
+		try {
+			const payload = JSON.parse(event.data as string)
+			if (payload != null) callbacks.onMessage(payload!)
+		} catch (_) {
+			callbacks.onError('收到无法识别的消息')
+		}
+	})
+	socketTask!.onError(() => callbacks.onError('聊天连接异常'))
+	socketTask!.onClose(() => callbacks.onClosed())
+}
+
+export function subscribeImConversation(conversationNo : string) : boolean {
+	return sendSocketData({
+		action: 'subscribe',
+		conversation_no: conversationNo
+	})
+}
+
+export function sendImText(conversationNo : string, text : string, clientMsgId : string) : boolean {
+	return sendSocketData({
+		action: 'send_message',
+		conversation_no: conversationNo,
+		message_type: 'text',
+		client_msg_id: clientMsgId,
+		content: { text: text }
+	})
+}
+
+function sendSocketData(payload : UTSJSONObject) : boolean {
+	if (socketTask == null) return false
+	socketTask!.send({
+		data: JSON.stringify(payload)
+	})
+	return true
+}
+
+export function closeImSocket() {
+	if (socketTask != null) {
+		socketTask!.close({})
+		socketTask = null
+	}
+}

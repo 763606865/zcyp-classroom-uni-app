@@ -1,0 +1,8 @@
+export const LOGIN_PATH = '/pages/auth/login'
+export const JOBS_PATH = '/pages/jobs/index'
+export const PROFILE_PATH = '/pages/profile/index'
+
+export const AUTH_REQUIRED_ROUTES : string[] = [
+	'/pages/messages/',
+	'/pages/resume/'
+]

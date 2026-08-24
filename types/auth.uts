@@ -1,0 +1,52 @@
+export type Organization = {
+	id : number
+	name : string
+	credit_code ?: string | null
+	status ?: number | null
+}
+
+export type UserIdentity = {
+	id : number
+	user_id : number
+	organization_type : string | null
+	organization_id : number | null
+	organization : Organization | null
+	identity_type : number
+	identity_name : string
+	organization_name : string | null
+	job_title : string | null
+	is_default : number
+	status : number
+	has_basic_info : boolean
+}
+
+export type AuthUser = {
+	id : number
+	uuid : string
+	name : string | null
+	nickname : string | null
+	phone : string | null
+	email : string | null
+	gender : number
+	avatar : string | null
+	current_identity : UserIdentity | null
+	identities : UserIdentity[]
+}
+
+export type LoginResult = {
+	token_type : string
+	access_token : string
+	user : AuthUser
+}
+
+// App 端微信授权登录响应：微信 SDK 无法像小程序一样直接给出已验证手机号，
+// 因此后端可能返回“需要补充绑定手机号”的中间态，此时 status 为 need_phone，
+// 并附带 pending_token 供后续 bindWechatPhone 使用；status 为 ok 时 token_type/
+// access_token/user 均有值，语义与 LoginResult 一致。
+export type WechatAppLoginResult = {
+	status : string // 'ok' | 'need_phone'
+	pending_token : string | null
+	token_type : string | null
+	access_token : string | null
+	user : AuthUser | null
+}

@@ -1,0 +1,5 @@
+export type LocationInfo = {
+	latitude : number
+	longitude : number
+	updatedAt : number
+}

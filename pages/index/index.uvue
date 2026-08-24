@@ -1,0 +1,25 @@
+<template>
+	<view class="launch">
+		<view class="brand"><text class="brand-text">Rc</text></view>
+		<text class="name">中测易招</text>
+		<text class="slogan">让人才与机会更快相遇</text>
+	</view>
+</template>
+
+<script setup lang="uts">
+	import { JOBS_PATH } from '../../config/routes.uts'
+
+	onMounted(() => {
+		setTimeout(() => {
+			uni.reLaunch({ url: JOBS_PATH })
+		}, 500)
+	})
+</script>
+
+<style scoped>
+	.launch { flex: 1; align-items: center; justify-content: center; background-color: #f3fbf7; }
+	.brand { width: 72px; height: 72px; border-radius: 22px; align-items: center; justify-content: center; background-color: #19a974; }
+	.brand-text { color: #ffffff; font-size: 30px; font-weight: 700; }
+	.name { margin-top: 18px; font-size: 24px; font-weight: 700; color: #17221e; }
+	.slogan { margin-top: 8px; font-size: 14px; color: #718078; }
+</style>

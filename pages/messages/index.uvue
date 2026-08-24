@@ -1,0 +1,174 @@
+<template>
+	<view class="rc-page page">
+		<scroll-view class="content" scroll-y refresher-enabled :refresher-triggered="refreshing" @refresherrefresh="load">
+			<view v-if="loading && conversations.length == 0" class="state"><text class="state-text">正在加载会话...</text></view>
+			<view v-else-if="conversations.length == 0" class="empty">
+				<text class="empty-icon-text">○</text>
+				<text class="empty-title">暂无沟通消息</text>
+				<text class="empty-desc">{{ recruiter ? '从牛人列表发起沟通后，会话会出现在这里' : '从职位详情与招聘方沟通后，会话会出现在这里' }}</text>
+			</view>
+			<view v-else class="conversation-list">
+				<view v-for="item in conversations" :key="item.id" class="conversation" @click="openChat(item)">
+					<view class="avatar">
+						<image v-if="avatar(item) != ''" class="avatar-image" :src="avatar(item)" mode="aspectFill" />
+						<text v-else class="avatar-text">{{ title(item).substring(0, 1) }}</text>
+					</view>
+					<view class="conversation-main">
+						<view class="conversation-head">
+							<text class="conversation-title">{{ title(item) }}</text>
+							<text class="time">{{ formatTime(conversationTime(item)) }}</text>
+						</view>
+						<view class="conversation-bottom">
+							<text class="preview">{{ subtitle(item) }}</text>
+							<view v-if="unreadNos.indexOf(item.conversation_no) >= 0" class="unread"></view>
+						</view>
+					</view>
+				</view>
+			</view>
+		</scroll-view>
+		<RcTabBar current-path="/pages/messages/index" />
+	</view>
+</template>
+
+<script setup lang="uts">
+	import RcTabBar from '../../components/RcTabBar.uvue'
+	import { getImConversations } from '../../api/im.uts'
+	import { isRecruiter } from '../../stores/auth.uts'
+	import type { ImConversation, ImParticipant } from '../../types/im.uts'
+
+	const conversations = ref<ImConversation[]>([])
+	const unreadNos = ref<string[]>([])
+	const loading = ref(false)
+	const refreshing = ref(false)
+	const recruiter = ref(false)
+
+	function hasText(value : string | null) : boolean {
+		return value != null && value != ''
+	}
+
+	function fallbackText(value : string | null, fallback : string) : string {
+		return hasText(value) ? value! : fallback
+	}
+
+	function errorMessage(error : any | null, fallback : string) : string {
+		return fallback
+	}
+
+	function parseStoredUnreadNos(value : any | null) : string[] {
+		if (value == null || value == '') return []
+		const text = typeof value == 'string' ? (value as string) : JSON.stringify(value)
+		if (text == '') return []
+		try {
+			const rows = JSON.parse<string[]>(text)
+			return rows == null ? [] : rows!
+		} catch (_) {
+			return []
+		}
+	}
+
+	function load() {
+		loading.value = true
+		refreshing.value = true
+		getImConversations().then((items) => {
+			conversations.value = items
+			loading.value = false
+			refreshing.value = false
+		}).catch((error : any | null) => {
+			uni.showToast({ title: errorMessage(error, '会话加载失败'), icon: 'none' })
+			loading.value = false
+			refreshing.value = false
+		})
+	}
+
+	onShow(() => {
+		recruiter.value = isRecruiter()
+		const saved = uni.getStorageSync('rc_im_unread_conversations')
+		unreadNos.value = parseStoredUnreadNos(saved)
+		load()
+	})
+
+	function participant(item : ImConversation) : ImParticipant | null {
+		if (item.other_participants != null && item.other_participants.length > 0) return item.other_participants[0]
+		if (item.participants != null && item.participants.length > 0) return item.participants[0]
+		return null
+	}
+
+	function title(item : ImConversation) : string {
+		const value = participant(item)
+		if (value != null && value.user != null) {
+			if (hasText(value.user!.mask_name)) return value.user!.mask_name!
+			if (hasText(value.user!.nickname)) return value.user!.nickname!
+			return fallbackText(value.user!.name, '招聘沟通')
+		}
+		if (item.metadata != null && item.metadata!['subject'] != null) {
+			const subject = item.metadata!['subject'] as string | null
+			if (hasText(subject)) return subject!
+		}
+		return fallbackText(item.conversation_type_label, '招聘沟通')
+	}
+
+	function avatar(item : ImConversation) : string {
+		const value = participant(item)
+		if (value == null || value.user == null) return ''
+		if (hasText(value.user!.display_avatar)) return value.user!.display_avatar!
+		return hasText(value.user!.avatar) ? value.user!.avatar! : ''
+	}
+
+	function subtitle(item : ImConversation) : string {
+		const value = participant(item)
+		if (value != null && value.identity != null) {
+			const organization = hasText(value.identity!.organization_name) ? value.identity!.organization_name! : ''
+			const job = hasText(value.identity!.job_title) ? value.identity!.job_title! : fallbackText(value.identity!.identity_name, '')
+			if (organization != '' && job != '') return `${organization} · ${job}`
+			if (organization != '') return organization
+			return job != '' ? job : '点击进入沟通'
+		}
+		return '点击进入沟通'
+	}
+
+	function conversationTime(item : ImConversation) : string | null {
+		return hasText(item.last_message_at) ? item.last_message_at! : item.created_at
+	}
+
+	function openChat(item : ImConversation) {
+		unreadNos.value = unreadNos.value.filter((no) => no != item.conversation_no)
+		uni.setStorageSync('rc_im_unread_conversations', JSON.stringify(unreadNos.value))
+		uni.navigateTo({
+			url: `/pages/messages/chat/index?id=${item.id}&no=${encodeURIComponent(item.conversation_no)}&title=${encodeURIComponent(title(item))}`
+		})
+	}
+
+	function formatTime(value : string | null) : string {
+		if (value == null || value == '') return ''
+		const date = new Date(value)
+		const now = new Date()
+		if (date.getFullYear() == now.getFullYear() && date.getMonth() == now.getMonth() && date.getDate() == now.getDate()) {
+			const hour = `${date.getHours()}`.padStart(2, '0')
+			const minute = `${date.getMinutes()}`.padStart(2, '0')
+			return `${hour}:${minute}`
+		}
+		return `${date.getMonth() + 1}/${date.getDate()}`
+	}
+</script>
+
+<style scoped>
+	.page, .content { flex: 1; background-color: #f6f7f9; }
+	.state { padding: 100px 0; align-items: center; }
+	.state-text { color: #8a9099; }
+	.empty { margin: 90px 24px 0; align-items: center; padding: 38px 22px; border-radius: 16px; background-color: #fff; }
+	.empty-icon-text { font-size: 40px; color: #19a974; }
+	.empty-title { margin-top: 16px; font-size: 18px; font-weight: 600; }
+	.empty-desc { margin-top: 8px; color: #8a9099; font-size: 13px; text-align: center; }
+	.conversation-list { padding-bottom: 76px; background-color: #fff; }
+	.conversation { min-height: 78px; padding: 13px 16px; flex-direction: row; align-items: center; border-bottom: 1px solid #f0f1f3; }
+	.avatar { width: 50px; height: 50px; border-radius: 13px; align-items: center; justify-content: center; overflow: hidden; background-color: #e5f6ee; }
+	.avatar-image { width: 50px; height: 50px; }
+	.avatar-text { color: #159669; font-size: 18px; font-weight: 600; }
+	.conversation-main { flex: 1; margin-left: 13px; }
+	.conversation-head, .conversation-bottom { flex-direction: row; align-items: center; }
+	.conversation-title { flex: 1; font-size: 16px; font-weight: 600; }
+	.time { color: #a0a6ac; font-size: 10px; }
+	.conversation-bottom { margin-top: 7px; }
+	.preview { flex: 1; color: #858c92; font-size: 12px; lines: 1; text-overflow: ellipsis; }
+	.unread { width: 8px; height: 8px; border-radius: 4px; background-color: #f04f4f; }
+</style>

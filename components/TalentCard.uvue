@@ -1,0 +1,84 @@
+<template>
+	<view class="card">
+		<view class="main">
+			<view class="avatar">
+				<image v-if="avatarUrl(item) != ''" class="avatar-image" :src="avatarUrl(item)" mode="aspectFill" />
+				<text v-else class="avatar-text">{{ item.full_name == '' ? '人' : item.full_name.substring(0, 1) }}</text>
+			</view>
+			<view class="info">
+				<view class="name-row">
+					<text class="name">{{ item.full_name == '' ? '候选人' : item.full_name }}</text>
+					<text v-if="item.is_fresh_graduate == 1" class="fresh">应届生</text>
+				</view>
+				<text class="title">{{ item.title == '' ? '求职简历' : item.title }}</text>
+			</view>
+			<text class="salary">{{ salaryText(item) }}</text>
+		</view>
+		<view class="meta">
+			<text>{{ ageText(item) }}</text><text class="dot">·</text>
+			<text>{{ workText(item) }}</text><text class="dot">·</text>
+			<text>{{ educationText(item.highest_education_level) }}</text>
+		</view>
+		<view class="foot">
+			<text class="city">{{ item.current_residence_city == null || item.current_residence_city == '' ? '现居地未填写' : item.current_residence_city }}</text>
+			<text class="updated">{{ formatDate(item.updated_at) }}</text>
+		</view>
+	</view>
+</template>
+
+<script setup lang="uts">
+	import type { TalentPreview } from '../types/discovery.uts'
+
+	defineProps<{ item : TalentPreview }>()
+
+	function avatarUrl(item : TalentPreview) : string {
+		if (item.display_avatar != null && item.display_avatar != '') return item.display_avatar!
+		return item.avatar == null ? '' : item.avatar!
+	}
+
+	function salaryText(item : TalentPreview) : string {
+		if (item.expected_salary_min == null && item.expected_salary_max == null) return '薪资面议'
+		const min = item.expected_salary_min == null ? '' : `${parseInt(item.expected_salary_min!)}`
+		const max = item.expected_salary_max == null ? '' : `${parseInt(item.expected_salary_max!)}`
+		return min != '' && max != '' ? `${min}-${max}` : `${min}${max}元`
+	}
+
+	function ageText(item : TalentPreview) : string {
+		return item.age == null || item.age == 0 ? '年龄未填' : `${item.age}岁`
+	}
+
+	function workText(item : TalentPreview) : string {
+		if (item.work_years == null) return '经验未填'
+		if (item.work_years == 0) return '应届生'
+		return `${item.work_years}年经验`
+	}
+
+	function educationText(value : number | null) : string {
+		const labels = ['学历未填', '高中/中专', '专科', '本科', '硕士', '博士', '其他']
+		if (value == null || value < 1 || value >= labels.length) return labels[0]
+		return labels[value]
+	}
+
+	function formatDate(value : string | null) : string {
+		if (value == null || value.length < 10) return '最近更新'
+		return `${value.substring(0, 10)}更新`
+	}
+</script>
+
+<style scoped>
+	.card { margin: 0 16px 12px; padding: 18px; border-radius: 16px; background-color: #fff; }
+	.main, .name-row, .meta, .foot { flex-direction: row; align-items: center; }
+	.avatar { width: 48px; height: 48px; border-radius: 15px; align-items: center; justify-content: center; overflow: hidden; background-color: #e7f7f0; }
+	.avatar-image { width: 48px; height: 48px; }
+	.avatar-text { color: #159669; font-size: 18px; font-weight: 700; }
+	.info { flex: 1; margin-left: 12px; }
+	.name { font-size: 16px; font-weight: 700; color: #24292d; }
+	.fresh { margin-left: 7px; padding: 2px 6px; border-radius: 5px; color: #159669; background-color: #eaf8f2; font-size: 9px; }
+	.title { margin-top: 6px; color: #687078; font-size: 12px; }
+	.salary { color: #f06b36; font-size: 14px; font-weight: 700; }
+	.meta { margin-top: 15px; color: #525a60; font-size: 12px; }
+	.dot { margin: 0 7px; color: #b5babd; }
+	.foot { margin-top: 14px; padding-top: 12px; border-top: 1px solid #f1f2f3; }
+	.city { flex: 1; color: #8a9197; font-size: 11px; }
+	.updated { color: #a2a7ab; font-size: 10px; }
+</style>

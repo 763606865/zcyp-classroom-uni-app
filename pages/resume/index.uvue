@@ -1,0 +1,139 @@
+<template>
+	<view class="page">
+		<scroll-view class="content" scroll-y refresher-enabled :refresher-triggered="refreshing" @refresherrefresh="load">
+			<view v-if="loading && resumes.length == 0" class="state"><text class="state-text">正在加载简历...</text></view>
+			<view v-else-if="resumes.length == 0" class="empty">
+				<text class="empty-icon-text">⌑</text>
+				<text class="empty-title">还没有在线简历</text>
+				<text class="empty-desc">完善简历，让招聘方更快了解你</text>
+				<button class="primary-button" @click="createNew">创建简历</button>
+			</view>
+			<view v-else class="resume-list">
+				<view v-for="item in resumes" :key="item.id" class="resume-card" @click="openDetail(item.id)">
+					<view class="card-head">
+						<view>
+							<view class="title-row">
+								<text class="resume-title">{{ item.title == '' ? '求职简历' : item.title }}</text>
+								<text v-if="item.is_primary == 1" class="primary-tag">主简历</text>
+							</view>
+							<text class="resume-name">{{ item.full_name }}</text>
+						</view>
+						<text class="arrow">›</text>
+					</view>
+					<view class="resume-meta">
+						<text class="meta-text">{{ educationLabel(item.highest_education_level) }}</text>
+						<text class="dot">·</text>
+						<text class="meta-text">{{ workYearsLabel(item.work_years) }}</text>
+						<text v-if="hasText(item.current_residence_city)" class="dot">·</text>
+						<text v-if="hasText(item.current_residence_city)" class="meta-text">{{ item.current_residence_city }}</text>
+					</view>
+					<view class="stats">
+						<text class="stat-text">被浏览 {{ item.stats == null ? 0 : item.stats!.views }} 次</text>
+						<text class="stat-gap">已投递 {{ item.stats == null ? 0 : item.stats!.applications }} 次</text>
+						<text class="updated">更新于 {{ formatDate(item.updated_at) }}</text>
+					</view>
+				</view>
+				<button class="outline-button" @click="createNew">＋ 新建另一份简历</button>
+			</view>
+		</scroll-view>
+	</view>
+</template>
+
+<script setup lang="uts">
+	import { getResumes } from '../../api/resume.uts'
+	import type { Resume } from '../../types/resume.uts'
+	import { getCurrentIdentityType } from '../../stores/auth.uts'
+
+	const resumes = ref<Resume[]>([])
+	const loading = ref(false)
+	const refreshing = ref(false)
+
+	function hasText(value : string | null) : boolean {
+		return value != null && value != ''
+	}
+
+	function errorMessage(error : any | null, fallback : string) : string {
+		return fallback
+	}
+
+	function load() {
+		loading.value = true
+		refreshing.value = true
+		getResumes().then((items) => {
+			resumes.value = items
+			loading.value = false
+			refreshing.value = false
+		}).catch((error : any | null) => {
+			uni.showToast({ title: errorMessage(error, '简历加载失败'), icon: 'none' })
+			loading.value = false
+			refreshing.value = false
+		})
+	}
+
+	onShow(() => {
+		if (getCurrentIdentityType() != 1) {
+			uni.showModal({
+				title: '请切换到求职者身份',
+				content: '简历仅在求职者身份下使用',
+				showCancel: false,
+				success: () => {
+					uni.navigateBack()
+				}
+			})
+			return
+		}
+		load()
+	})
+
+	function createNew() {
+		uni.navigateTo({ url: '/pages/resume/edit' })
+	}
+
+	function openDetail(id : number) {
+		uni.navigateTo({ url: `/pages/resume/detail?id=${id}` })
+	}
+
+	function educationLabel(value : number | null) : string {
+		const labels = ['未填写', '高中/中专', '专科', '本科', '硕士', '博士', '其他']
+		if (value == null || value < 1 || value >= labels.length) return labels[0]
+		return labels[value]
+	}
+
+	function workYearsLabel(value : number | null) : string {
+		if (value == null) return '工作年限未填写'
+		if (value == 0) return '应届生'
+		return `${value}年经验`
+	}
+
+	function formatDate(value : string | null) : string {
+		if (value == null || value.length < 10) return '刚刚'
+		return value.substring(0, 10)
+	}
+</script>
+
+<style scoped>
+	.page, .content { flex: 1; background-color: #f6f7f9; }
+	.state { padding: 100px 0; align-items: center; }
+	.state-text { color: #8a9099; }
+	.empty { margin: 80px 20px; padding: 42px 24px; align-items: center; border-radius: 18px; background-color: #fff; }
+	.empty-icon-text { font-size: 46px; color: #19a974; }
+	.empty-title { margin-top: 16px; font-size: 19px; font-weight: 600; }
+	.empty-desc { margin-top: 8px; color: #8a9099; font-size: 13px; }
+	.primary-button { margin-top: 24px; width: 180px; height: 44px; line-height: 44px; border-radius: 12px; color: #fff; background-color: #19a974; font-size: 15px; }
+	.resume-list { padding: 14px 16px 30px; }
+	.resume-card { margin-bottom: 13px; padding: 19px; border-radius: 15px; background-color: #fff; }
+	.card-head, .title-row, .resume-meta, .stats { flex-direction: row; align-items: center; }
+	.card-head { justify-content: space-between; }
+	.resume-title { font-size: 18px; font-weight: 700; }
+	.primary-tag { margin-left: 8px; padding: 2px 7px; border-radius: 6px; color: #168e64; background-color: #eaf8f2; font-size: 10px; }
+	.resume-name { margin-top: 7px; color: #687078; font-size: 13px; }
+	.arrow { color: #bcc2c8; font-size: 25px; }
+	.resume-meta { margin-top: 16px; }
+	.meta-text { color: #454b51; font-size: 13px; }
+	.dot { margin: 0 7px; color: #b1b6bb; font-size: 13px; }
+	.stats { margin-top: 16px; padding-top: 13px; border-top: 1px solid #f0f1f3; }
+	.stat-text { color: #92989e; font-size: 11px; }
+	.stat-gap { margin-left: 14px; color: #92989e; font-size: 11px; }
+	.updated { flex: 1; text-align: right; color: #92989e; font-size: 11px; }
+	.outline-button { margin: 8px 0 20px; height: 44px; line-height: 44px; border-radius: 12px; color: #159669; background-color: #fff; font-size: 14px; }
+</style>

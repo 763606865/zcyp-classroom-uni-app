@@ -1,0 +1,11 @@
+import App from './App.uvue'
+import { installRouteMiddleware } from './middleware/auth.uts'
+
+import { createSSRApp } from 'vue'
+export function createApp() {
+	const app = createSSRApp(App)
+	installRouteMiddleware()
+	return {
+		app
+	}
+}

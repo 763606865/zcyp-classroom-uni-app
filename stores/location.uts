@@ -1,0 +1,37 @@
+import type { LocationInfo } from '../types/location.uts'
+
+const LOCATION_KEY = 'rc_last_location'
+
+let lastLocation : LocationInfo | null = null
+
+function parseStoredLocation(value : any | null) : LocationInfo | null {
+	if (value == null || value == '') return null
+	const text = typeof value == 'string' ? (value as string) : JSON.stringify(value)
+	if (text == '') return null
+	try {
+		const location = JSON.parse<LocationInfo>(text)
+		return location == null ? null : location!
+	} catch (_) {
+		return null
+	}
+}
+
+export function hydrateLocation() {
+	const saved = uni.getStorageSync(LOCATION_KEY)
+	lastLocation = parseStoredLocation(saved)
+}
+
+export function setLocation(location : LocationInfo) {
+	lastLocation = location
+	uni.setStorageSync(LOCATION_KEY, JSON.stringify(location))
+}
+
+export function getLocation() : LocationInfo | null {
+	if (lastLocation == null) hydrateLocation()
+	return lastLocation
+}
+
+export function clearLocation() {
+	lastLocation = null
+	uni.removeStorageSync(LOCATION_KEY)
+}

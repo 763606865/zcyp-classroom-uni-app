@@ -1,0 +1,54 @@
+import { setLocation } from '../stores/location.uts'
+
+// 小程序端定位权限走 scope.userLocation 的 authorize 流程；App/其他端调用
+// uni.getLocation 时系统会自动弹出定位权限对话框，无需单独申请 scope。
+function ensureLocationScope() : Promise<boolean> {
+	return new Promise<boolean>((resolve) => {
+		// #ifdef MP-WEIXIN
+		uni.getSetting({
+			success: (res) => {
+				const authSetting = res.authSetting as UTSJSONObject
+				const granted = authSetting['scope.userLocation']
+				if (granted == true) {
+					resolve(true)
+					return
+				}
+				if (granted == false) {
+					// 用户此前已明确拒绝，此次不再弹窗打扰，交由设置页手动开启
+					resolve(false)
+					return
+				}
+				uni.authorize({
+					scope: 'scope.userLocation',
+					success: () => resolve(true),
+					fail: () => resolve(false)
+				})
+			},
+			fail: () => resolve(false)
+		})
+		// #endif
+		// #ifndef MP-WEIXIN
+		resolve(true)
+		// #endif
+	})
+}
+
+// 登录成功后调用一次：申请定位权限并静默获取一次经纬度，失败不阻塞登录流程。
+export function requestLocationAfterLogin() {
+	ensureLocationScope().then((granted : boolean) => {
+		if (!granted) return
+		uni.getLocation({
+			type: 'gcj02',
+			success: (res) => {
+				setLocation({
+					latitude: res.latitude,
+					longitude: res.longitude,
+					updatedAt: Date.now()
+				})
+			},
+			fail: () => {
+				// 定位服务关闭 / 用户拒绝等情况，静默忽略即可
+			}
+		})
+	})
+}

@@ -1,0 +1,50 @@
+import { API_BASE_URL, REQUEST_TIMEOUT } from '../config/env.uts'
+import { LOGIN_PATH } from '../config/routes.uts'
+import { clearSession, getToken } from '../stores/auth.uts'
+
+function fallbackMessage(value : string | null, fallback : string) : string {
+	return value == null || value == '' ? fallback : value
+}
+
+export function request<T>(path : string, method : RequestMethod = 'GET', data : any | null = null, requireAuth : boolean = true) : Promise<T> {
+	return new Promise<T>((resolve, reject) => {
+		const token = getToken()
+		const headers = {
+			'Accept': 'application/json',
+			'Content-Type': 'application/json'
+		} as UTSJSONObject
+		if (token != '') {
+			headers['Authorization'] = `Bearer ${token}`
+		}
+
+		uni.request({
+			url: `${API_BASE_URL}${path}`,
+			method: method,
+			data: data,
+			header: headers,
+			timeout: REQUEST_TIMEOUT,
+			success: (response) => {
+				const statusCode = response.statusCode
+				if (statusCode == 401) {
+					clearSession()
+					if (requireAuth) {
+						uni.navigateTo({ url: LOGIN_PATH })
+					}
+					reject(new Error('登录状态已失效，请重新登录'))
+					return
+				}
+
+				const body = response.data as UTSJSONObject
+				const code = body['code'] as number
+				if (statusCode < 200 || statusCode >= 300 || code != 200) {
+					reject(new Error(fallbackMessage(body['message'] as string | null, '请求失败，请稍后重试')))
+					return
+				}
+				resolve(body['data'] as T)
+			},
+			fail: (error) => {
+				reject(new Error(fallbackMessage(error.errMsg, '网络连接失败')))
+			}
+		})
+	})
+}

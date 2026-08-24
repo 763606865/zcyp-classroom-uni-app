@@ -1,0 +1,91 @@
+import { request } from '../services/http.uts'
+import type { Resume, ResumeEducation, ResumeWork } from '../types/resume.uts'
+
+function parseResume(data : any | null) : Resume {
+	const resume = JSON.parse<Resume>(JSON.stringify(data))
+	if (resume == null) {
+		throw new Error('简历响应解析失败')
+	}
+	return resume!
+}
+
+function parseResumes(data : any | null) : Resume[] {
+	const resumes = JSON.parse<Resume[]>(JSON.stringify(data))
+	return resumes == null ? [] : resumes!
+}
+
+function parseResumeWork(data : any | null) : ResumeWork {
+	const work = JSON.parse<ResumeWork>(JSON.stringify(data))
+	if (work == null) {
+		throw new Error('工作经历响应解析失败')
+	}
+	return work!
+}
+
+function parseResumeWorks(data : any | null) : ResumeWork[] {
+	const works = JSON.parse<ResumeWork[]>(JSON.stringify(data))
+	return works == null ? [] : works!
+}
+
+function parseResumeEducation(data : any | null) : ResumeEducation {
+	const education = JSON.parse<ResumeEducation>(JSON.stringify(data))
+	if (education == null) {
+		throw new Error('教育经历响应解析失败')
+	}
+	return education!
+}
+
+function parseResumeEducations(data : any | null) : ResumeEducation[] {
+	const educations = JSON.parse<ResumeEducation[]>(JSON.stringify(data))
+	return educations == null ? [] : educations!
+}
+
+export function getResumes() : Promise<Resume[]> {
+	return request<UTSJSONObject>('/rc/resumes', 'GET', { per_page: 100 }).then((data : UTSJSONObject) : Resume[] => {
+		return parseResumes(data['data'])
+	})
+}
+
+export function getResume(id : number) : Promise<Resume> {
+	return request<UTSJSONObject>(`/rc/resumes/${id}`).then((data : UTSJSONObject) : Resume => parseResume(data))
+}
+
+export function createResume(payload : UTSJSONObject) : Promise<Resume> {
+	return request<UTSJSONObject>('/rc/resumes', 'POST', payload).then((data : UTSJSONObject) : Resume => parseResume(data))
+}
+
+export function updateResume(id : number, payload : UTSJSONObject) : Promise<Resume> {
+	return request<UTSJSONObject>(`/rc/resumes/${id}`, 'PUT', payload).then((data : UTSJSONObject) : Resume => parseResume(data))
+}
+
+export function getResumeWorks(resumeId : number) : Promise<ResumeWork[]> {
+	return request<UTSJSONObject>(`/rc/resumes/${resumeId}/works`).then((data : UTSJSONObject) : ResumeWork[] => parseResumeWorks(data['works']))
+}
+
+export function createResumeWork(resumeId : number, payload : UTSJSONObject) : Promise<ResumeWork> {
+	return request<UTSJSONObject>(`/rc/resumes/${resumeId}/works`, 'POST', payload).then((data : UTSJSONObject) : ResumeWork => parseResumeWork(data))
+}
+
+export function updateResumeWork(resumeId : number, workId : number, payload : UTSJSONObject) : Promise<ResumeWork> {
+	return request<UTSJSONObject>(`/rc/resumes/${resumeId}/works/${workId}`, 'PUT', payload).then((data : UTSJSONObject) : ResumeWork => parseResumeWork(data))
+}
+
+export function deleteResumeWork(resumeId : number, workId : number) : Promise<any> {
+	return request<any>(`/rc/resumes/${resumeId}/works/${workId}`, 'DELETE')
+}
+
+export function getResumeEducations(resumeId : number) : Promise<ResumeEducation[]> {
+	return request<UTSJSONObject>(`/rc/resumes/${resumeId}/educations`).then((data : UTSJSONObject) : ResumeEducation[] => parseResumeEducations(data['educations']))
+}
+
+export function createResumeEducation(resumeId : number, payload : UTSJSONObject) : Promise<ResumeEducation> {
+	return request<UTSJSONObject>(`/rc/resumes/${resumeId}/educations`, 'POST', payload).then((data : UTSJSONObject) : ResumeEducation => parseResumeEducation(data))
+}
+
+export function updateResumeEducation(resumeId : number, educationId : number, payload : UTSJSONObject) : Promise<ResumeEducation> {
+	return request<UTSJSONObject>(`/rc/resumes/${resumeId}/educations/${educationId}`, 'PUT', payload).then((data : UTSJSONObject) : ResumeEducation => parseResumeEducation(data))
+}
+
+export function deleteResumeEducation(resumeId : number, educationId : number) : Promise<any> {
+	return request<any>(`/rc/resumes/${resumeId}/educations/${educationId}`, 'DELETE')
+}

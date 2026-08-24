@@ -1,0 +1,172 @@
+<template>
+	<view class="rc-page page">
+		<view class="search-panel">
+			<view class="search-row">
+				<input v-model="keyword" class="search-input" confirm-type="search" placeholder="搜索姓名、技能、职位或学校" @confirm="search" />
+				<button class="search-button" @click="search">搜索</button>
+			</view>
+			<scroll-view class="filters" scroll-x>
+				<view class="filter-row">
+					<picker :range="cityLabels" :value="cityIndex" @change="onCityChange"><text class="filter">{{ cityLabels[cityIndex] }}⌄</text></picker>
+					<picker :range="educationLabels" :value="educationIndex" @change="onEducationChange"><text class="filter">{{ educationLabels[educationIndex] }}⌄</text></picker>
+					<picker :range="experienceLabels" :value="experienceIndex" @change="onExperienceChange"><text class="filter">{{ experienceLabels[experienceIndex] }}⌄</text></picker>
+					<picker :range="graduateLabels" :value="graduateIndex" @change="onGraduateChange"><text class="filter">{{ graduateLabels[graduateIndex] }}⌄</text></picker>
+				</view>
+			</scroll-view>
+		</view>
+		<scroll-view class="content" scroll-y refresher-enabled :refresher-triggered="refreshing"
+			@refresherrefresh="refresh" @scrolltolower="loadMore">
+			<view class="summary"><text class="summary-text">找到 {{ total }} 位候选人</text><text v-if="hasFilter" class="clear" @click="clearFilters">清除筛选</text></view>
+			<view v-if="loading && talents.length == 0" class="state"><text class="state-text">正在搜索牛人...</text></view>
+			<view v-else-if="talents.length == 0" class="empty"><text class="empty-title">没有找到相关候选人</text><text class="empty-desc">尝试减少筛选条件或更换关键词</text></view>
+			<view v-else class="list">
+				<TalentCard v-for="item in talents" :key="item.id" :item="item" />
+				<text class="more">{{ loadingMore ? '正在加载...' : (hasMore ? '上拉加载更多' : '已经到底了') }}</text>
+			</view>
+		</scroll-view>
+		<RcTabBar current-path="/pages/search/index" />
+	</view>
+</template>
+
+<script setup lang="uts">
+	import RcTabBar from '../../components/RcTabBar.uvue'
+	import TalentCard from '../../components/TalentCard.uvue'
+	import { searchTalents } from '../../api/discovery.uts'
+	import { getCachedMeta, getMeta } from '../../api/meta.uts'
+	import { isRecruiter } from '../../stores/auth.uts'
+	import type { TalentPreview } from '../../types/discovery.uts'
+	import type { MetaTreeItem, RcMeta } from '../../types/meta.uts'
+
+	const talents = ref<TalentPreview[]>([])
+	const cities = ref<MetaTreeItem[]>([])
+	const cityLabels = ref<string[]>(['全部城市'])
+	const educationLabels = ['学历不限', '高中/中专', '专科', '本科', '硕士', '博士', '其他']
+	const experienceLabels = ['经验不限', '应届/1年内', '1-3年', '3-5年', '5-10年', '10年以上']
+	const graduateLabels = ['毕业状态不限', '仅应届生', '非应届生']
+	const cityIndex = ref(0)
+	const educationIndex = ref(0)
+	const experienceIndex = ref(0)
+	const graduateIndex = ref(0)
+	const keyword = ref('')
+	const total = ref(0)
+	const pageNo = ref(1)
+	const hasMore = ref(true)
+	const hasFilter = computed(() : boolean => keyword.value != '' || cityIndex.value > 0 || educationIndex.value > 0 || experienceIndex.value > 0 || graduateIndex.value > 0)
+	const loading = ref(false)
+	const loadingMore = ref(false)
+	const refreshing = ref(false)
+
+	function collectCities(nodes : MetaTreeItem[], result : MetaTreeItem[]) {
+		nodes.forEach((item) => {
+			if (item.level == 2) result.push(item)
+			if (item.children.length > 0) collectCities(item.children, result)
+		})
+	}
+
+	function applyMeta(meta : RcMeta) {
+		const result : MetaTreeItem[] = []
+		collectCities(meta.areas, result)
+		cities.value = result
+		cityLabels.value = ['全部城市'].concat(result.map((item) : string => item.name))
+	}
+
+	function prepareMeta() {
+		const cached = getCachedMeta()
+		if (cached != null) applyMeta(cached!)
+		getMeta().then((meta) => applyMeta(meta)).catch(() => {})
+	}
+
+	function errorMessage(error : any | null, fallback : string) : string {
+		if (error == null) return fallback
+		const cause = error as Error
+		return cause.message == '' ? fallback : cause.message
+	}
+
+	function applyExperience(query : UTSJSONObject) {
+		if (experienceIndex.value == 1) { query['work_years_min'] = 0; query['work_years_max'] = 1 }
+		if (experienceIndex.value == 2) { query['work_years_min'] = 1; query['work_years_max'] = 3 }
+		if (experienceIndex.value == 3) { query['work_years_min'] = 3; query['work_years_max'] = 5 }
+		if (experienceIndex.value == 4) { query['work_years_min'] = 5; query['work_years_max'] = 10 }
+		if (experienceIndex.value == 5) query['work_years_min'] = 10
+	}
+
+	function requestPage(reset : boolean) {
+		if (!isRecruiter()) {
+			uni.showToast({ title: '请先切换为招聘方身份', icon: 'none' })
+			return
+		}
+		if (reset) {
+			pageNo.value = 1
+			hasMore.value = true
+			loading.value = true
+		} else {
+			if (!hasMore.value || loadingMore.value) return
+			loadingMore.value = true
+		}
+		const query = { page: pageNo.value, per_page: 15 } as UTSJSONObject
+		if (keyword.value.trim() != '') query['keyword'] = keyword.value.trim()
+		if (cityIndex.value > 0) query['current_city_code'] = cities.value[cityIndex.value - 1].code
+		if (educationIndex.value > 0) query['highest_education_level'] = educationIndex.value
+		if (graduateIndex.value > 0) query['is_fresh_graduate'] = graduateIndex.value == 1 ? 1 : 0
+		applyExperience(query)
+		searchTalents(query).then((result) => {
+			talents.value = reset ? result.data : talents.value.concat(result.data)
+			total.value = result.total
+			hasMore.value = result.current_page < result.last_page
+			if (hasMore.value) pageNo.value++
+			loading.value = false
+			loadingMore.value = false
+			refreshing.value = false
+		}).catch((error : any | null) => {
+			uni.showToast({ title: errorMessage(error, '牛人搜索失败'), icon: 'none' })
+			loading.value = false
+			loadingMore.value = false
+			refreshing.value = false
+		})
+	}
+
+	function eventIndex(event : UTSJSONObject) : number {
+		const detail = event['detail'] as UTSJSONObject
+		return parseInt(detail['value'] as string)
+	}
+	function search() { requestPage(true) }
+	function onCityChange(event : UTSJSONObject) { cityIndex.value = eventIndex(event); search() }
+	function onEducationChange(event : UTSJSONObject) { educationIndex.value = eventIndex(event); search() }
+	function onExperienceChange(event : UTSJSONObject) { experienceIndex.value = eventIndex(event); search() }
+	function onGraduateChange(event : UTSJSONObject) { graduateIndex.value = eventIndex(event); search() }
+	function refresh() { refreshing.value = true; requestPage(true) }
+	function loadMore() { requestPage(false) }
+	function clearFilters() {
+		keyword.value = ''
+		cityIndex.value = 0
+		educationIndex.value = 0
+		experienceIndex.value = 0
+		graduateIndex.value = 0
+		search()
+	}
+
+	onLoad(() => prepareMeta())
+	onShow(() => { if (talents.value.length == 0) requestPage(true) })
+</script>
+
+<style scoped>
+	.page { background-color: #f4f7f5; }
+	.search-panel { padding: 13px 15px 10px; background-color: #fff; }
+	.search-row, .filter-row, .summary { flex-direction: row; align-items: center; }
+	.search-input { flex: 1; height: 42px; padding: 0 14px; border-radius: 12px; background-color: #f3f6f5; font-size: 13px; }
+	.search-button { width: 66px; height: 42px; margin-left: 9px; padding: 0; line-height: 42px; border-radius: 12px; background-color: #19a974; color: #fff; font-size: 13px; }
+	.filters { margin-top: 11px; height: 34px; }
+	.filter-row { height: 34px; }
+	.filter { margin-right: 9px; padding: 7px 11px; border-radius: 17px; background-color: #f3f6f5; color: #56615c; font-size: 11px; white-space: nowrap; }
+	.content { flex: 1; }
+	.summary { padding: 13px 17px 11px; justify-content: space-between; }
+	.summary-text { color: #78817c; font-size: 11px; }
+	.clear { color: #159669; font-size: 11px; }
+	.state { padding: 100px 0; align-items: center; }
+	.state-text { color: #8a9099; }
+	.empty { margin: 60px 20px; padding: 36px 22px; align-items: center; border-radius: 16px; background-color: #fff; }
+	.empty-title { font-size: 17px; font-weight: 600; }
+	.empty-desc { margin-top: 8px; color: #8a9099; font-size: 12px; }
+	.list { padding-bottom: 90px; }
+	.more { padding: 8px 0 25px; color: #a0a6a2; text-align: center; font-size: 11px; }
+</style>

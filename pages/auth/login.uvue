@@ -1,0 +1,199 @@
+<template>
+	<scroll-view class="login-page" scroll-y>
+		<view class="login-header">
+			<view class="brand"><text class="brand-text">Rc</text></view>
+			<text class="title">登录中测易招</text>
+			<text class="subtitle">首次验证成功将自动注册账号</text>
+		</view>
+
+		<view class="login-card">
+			<view class="mode-tabs">
+				<view class="mode-tab" :class="{ 'mode-tab-selected': mode == 'phone' }" @click="setMode('phone')">
+					<text class="mode-tab-text" :class="{ 'mode-tab-text-selected': mode == 'phone' }">手机号</text>
+				</view>
+				<view class="mode-tab" :class="{ 'mode-tab-selected': mode == 'email' }" @click="setMode('email')">
+					<text class="mode-tab-text" :class="{ 'mode-tab-text-selected': mode == 'email' }">邮箱</text>
+				</view>
+			</view>
+
+			<input
+				v-if="mode == 'phone'"
+				v-model="account"
+				class="field"
+				type="number"
+				maxlength="11"
+				placeholder="请输入手机号"
+			/>
+			<input
+				v-else
+				v-model="account"
+				class="field"
+				type="text"
+				placeholder="请输入邮箱"
+			/>
+
+			<view class="code-row">
+				<input v-model="code" class="field code-field" type="number" maxlength="6" placeholder="6位验证码" />
+				<button class="code-button" :disabled="countdown > 0 || sending" @click="sendCode">
+					{{ countdown > 0 ? countdown + 's' : '获取验证码' }}
+				</button>
+			</view>
+
+			<button class="login-button" :loading="submitting" :disabled="submitting" @click="submit">
+				登录 / 注册
+			</button>
+
+			<view class="agreement" @click="agreed = !agreed">
+				<view class="checkbox" :class="{ checked: agreed }">
+					<text v-if="agreed" class="checkbox-mark">✓</text>
+				</view>
+				<text class="agreement-text">我已阅读并同意《用户协议》和《隐私政策》</text>
+			</view>
+
+			<!-- #ifdef MP-WEIXIN || APP-ANDROID || APP-IOS -->
+			<view class="wechat-entry" @click="goWechatLogin">
+				<text class="wechat-entry-text">微信一键登录</text>
+			</view>
+			<!-- #endif -->
+		</view>
+	</scroll-view>
+</template>
+
+<script setup lang="uts">
+	import { phoneLogin, emailLogin, sendVerificationCode } from '../../api/auth.uts'
+	import { setSession } from '../../stores/auth.uts'
+	import { requestLocationAfterLogin } from '../../utils/location.uts'
+
+	const mode = ref('phone')
+	const account = ref('')
+	const code = ref('')
+	const agreed = ref(false)
+	const sending = ref(false)
+	const submitting = ref(false)
+	const countdown = ref(0)
+	let timer : number | null = null
+	let redirect = '/pages/jobs/index'
+
+	onLoad((options : UTSJSONObject) => {
+		const redirectValue = options['redirect'] as string | null
+		if (redirectValue != null && redirectValue != '') {
+			const decoded = decodeURIComponent(redirectValue)
+			if (decoded != null) redirect = decoded
+		}
+	})
+
+	onUnmounted(() => {
+		if (timer != null) clearInterval(timer!)
+	})
+
+	function goWechatLogin() {
+		uni.navigateTo({ url: `/pages/auth/wechat?redirect=${encodeURIComponent(redirect)}` })
+	}
+
+	function setMode(value : string) {
+		mode.value = value
+		account.value = ''
+		code.value = ''
+	}
+
+	function validAccount() : boolean {
+		if (mode.value == 'phone') return /^1\d{10}$/.test(account.value)
+		return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(account.value)
+	}
+
+	function showError(message : string) {
+		uni.showToast({ title: message, icon: 'none' })
+	}
+
+	function errorMessage(error : any | null, fallback : string) : string {
+		if (error == null) return fallback
+		const cause = error as Error
+		if (cause.message == '') return fallback
+		return cause.message
+	}
+
+	function sendCode() {
+		if (!validAccount()) {
+			showError(mode.value == 'phone' ? '请输入正确的手机号' : '请输入正确的邮箱')
+			return
+		}
+		sending.value = true
+		sendVerificationCode(mode.value, account.value).then(() => {
+			countdown.value = 60
+			timer = setInterval(() => {
+				countdown.value--
+				if (countdown.value <= 0 && timer != null) {
+					clearInterval(timer!)
+					timer = null
+				}
+			}, 1000)
+			uni.showToast({ title: '验证码已发送', icon: 'success' })
+			sending.value = false
+		}).catch((error : any | null) => {
+			showError(errorMessage(error, '验证码发送失败'))
+			sending.value = false
+		})
+	}
+
+	function submit() {
+		if (!validAccount()) {
+			showError(mode.value == 'phone' ? '请输入正确的手机号' : '请输入正确的邮箱')
+			return
+		}
+		if (!/^\d{6}$/.test(code.value)) {
+			showError('请输入6位验证码')
+			return
+		}
+		if (!agreed.value) {
+			showError('请先同意用户协议和隐私政策')
+			return
+		}
+
+		submitting.value = true
+		const task = mode.value == 'phone'
+			? phoneLogin(account.value, code.value)
+			: emailLogin(account.value.toLowerCase(), code.value)
+		task.then((result) => {
+			setSession(result)
+			requestLocationAfterLogin()
+			uni.showToast({ title: '登录成功', icon: 'success' })
+			if (redirect == '/pages/jobs/index' && result.user.current_identity != null && result.user.current_identity!.identity_type == 2) {
+				redirect = '/pages/talents/index'
+			}
+			setTimeout(() => {
+				uni.reLaunch({ url: redirect })
+			}, 300)
+			submitting.value = false
+		}).catch((error : any | null) => {
+			showError(errorMessage(error, '登录失败'))
+			submitting.value = false
+		})
+	}
+</script>
+
+<style scoped>
+	.login-page { flex: 1; background-color: #f3fbf7; }
+	.login-header { padding: 70px 28px 28px; align-items: center; }
+	.brand { width: 64px; height: 64px; border-radius: 20px; align-items: center; justify-content: center; background-color: #19a974; }
+	.brand-text { color: #fff; font-size: 27px; font-weight: 700; }
+	.title { margin-top: 20px; font-size: 24px; font-weight: 700; }
+	.subtitle { margin-top: 8px; color: #7b8680; font-size: 13px; }
+	.login-card { margin: 0 20px; padding: 24px; border-radius: 18px; background-color: #fff; }
+	.mode-tabs { flex-direction: row; margin-bottom: 22px; border-bottom: 1px solid #eef0f3; }
+	.mode-tab { flex: 1; padding: 12px 0; align-items: center; }
+	.mode-tab-selected { border-bottom: 2px solid #19a974; }
+	.mode-tab-text { color: #8a9099; font-size: 16px; }
+	.mode-tab-text-selected { color: #159669; font-weight: 600; }
+	.field { height: 48px; padding: 0 14px; border-radius: 10px; background-color: #f6f7f9; font-size: 15px; }
+	.code-row { margin-top: 14px; flex-direction: row; }
+	.code-field { flex: 1; }
+	.code-button { width: 118px; height: 48px; margin-left: 10px; padding: 0; line-height: 48px; border-radius: 10px; background-color: #eaf8f2; color: #159669; font-size: 13px; }
+	.login-button { margin-top: 24px; height: 48px; line-height: 48px; border-radius: 12px; background-color: #19a974; color: #fff; font-size: 16px; font-weight: 600; }
+	.agreement { margin-top: 18px; flex-direction: row; align-items: center; justify-content: center; }
+	.checkbox { width: 16px; height: 16px; border: 1px solid #c6ccd2; border-radius: 4px; align-items: center; justify-content: center; }
+	.checkbox-mark { color: #fff; font-size: 11px; }
+	.checked { background-color: #19a974; border-color: #19a974; }
+	.agreement-text { margin-left: 7px; font-size: 11px; color: #7b8188; }
+	.wechat-entry { margin-top: 18px; align-items: center; }
+	.wechat-entry-text { font-size: 13px; color: #19a974; font-weight: 600; }
+</style>

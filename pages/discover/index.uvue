@@ -1,0 +1,171 @@
+<template>
+	<view class="rc-page page">
+		<view class="search-panel">
+			<view class="search-row">
+				<input v-model="keyword" class="search-input" confirm-type="search" placeholder="搜索职位、企业或技能" @confirm="search" />
+				<button class="search-button" @click="search">搜索</button>
+			</view>
+			<scroll-view class="filters" scroll-x>
+				<view class="filter-row">
+					<picker :range="cityLabels" :value="cityIndex" @change="onCityChange"><text class="filter">{{ cityLabels[cityIndex] }}⌄</text></picker>
+					<picker :range="positionLabels" :value="positionIndex" @change="onPositionChange"><text class="filter">{{ positionLabels[positionIndex] }}⌄</text></picker>
+					<picker :range="employmentLabels" :value="employmentIndex" @change="onEmploymentChange"><text class="filter">{{ employmentLabels[employmentIndex] }}⌄</text></picker>
+					<picker :range="educationLabels" :value="educationIndex" @change="onEducationChange"><text class="filter">{{ educationLabels[educationIndex] }}⌄</text></picker>
+				</view>
+			</scroll-view>
+		</view>
+		<scroll-view class="content" scroll-y refresher-enabled :refresher-triggered="refreshing"
+			@refresherrefresh="refresh" @scrolltolower="loadMore">
+			<view class="summary"><text class="summary-text">发现 {{ total }} 个在招职位</text><text v-if="hasFilter" class="clear" @click="clearFilters">清除筛选</text></view>
+			<view v-if="loading && jobs.length == 0" class="state"><text class="state-text">正在搜索职位...</text></view>
+			<view v-else-if="jobs.length == 0" class="empty"><text class="empty-title">没有找到相关职位</text><text class="empty-desc">尝试减少筛选条件或更换关键词</text></view>
+			<view v-else class="list">
+				<JobCard v-for="item in jobs" :key="item.id" :item="item" />
+				<text class="more">{{ loadingMore ? '正在加载...' : (hasMore ? '上拉加载更多' : '已经到底了') }}</text>
+			</view>
+		</scroll-view>
+		<RcTabBar current-path="/pages/discover/index" />
+	</view>
+</template>
+
+<script setup lang="uts">
+	import RcTabBar from '../../components/RcTabBar.uvue'
+	import JobCard from '../../components/JobCard.uvue'
+	import { searchJobs } from '../../api/discovery.uts'
+	import { getCachedMeta, getMeta } from '../../api/meta.uts'
+	import type { JobPreview } from '../../types/discovery.uts'
+	import type { MetaTreeItem, RcMeta } from '../../types/meta.uts'
+
+	const jobs = ref<JobPreview[]>([])
+	const cities = ref<MetaTreeItem[]>([])
+	const positions = ref<MetaTreeItem[]>([])
+	const cityLabels = ref<string[]>(['全部城市'])
+	const positionLabels = ref<string[]>(['全部职位'])
+	const employmentLabels = ['全部类型', '全职', '兼职', '实习', '校招', '外包']
+	const educationLabels = ['学历不限', '高中/中专', '专科', '本科', '硕士', '博士', '其他']
+	const cityIndex = ref(0)
+	const positionIndex = ref(0)
+	const employmentIndex = ref(0)
+	const educationIndex = ref(0)
+	const keyword = ref('')
+	const total = ref(0)
+	const pageNo = ref(1)
+	const hasMore = ref(true)
+	const hasFilter = computed(() : boolean => keyword.value != '' || cityIndex.value > 0 || positionIndex.value > 0 || employmentIndex.value > 0 || educationIndex.value > 0)
+	const loading = ref(false)
+	const loadingMore = ref(false)
+	const refreshing = ref(false)
+
+	function flattenLeaves(nodes : MetaTreeItem[], result : MetaTreeItem[]) {
+		nodes.forEach((item) => {
+			if (item.children.length == 0) result.push(item)
+			else flattenLeaves(item.children, result)
+		})
+	}
+
+	function collectCities(nodes : MetaTreeItem[], result : MetaTreeItem[]) {
+		nodes.forEach((item) => {
+			if (item.level == 2) result.push(item)
+			if (item.children.length > 0) collectCities(item.children, result)
+		})
+	}
+
+	function applyMeta(meta : RcMeta) {
+		const cityRows : MetaTreeItem[] = []
+		const positionRows : MetaTreeItem[] = []
+		collectCities(meta.areas, cityRows)
+		flattenLeaves(meta.positions, positionRows)
+		cities.value = cityRows
+		positions.value = positionRows
+		cityLabels.value = ['全部城市'].concat(cityRows.map((item) : string => item.name))
+		positionLabels.value = ['全部职位'].concat(positionRows.map((item) : string => item.name))
+	}
+
+	function prepareMeta() {
+		const cached = getCachedMeta()
+		if (cached != null) applyMeta(cached!)
+		getMeta().then((meta) => applyMeta(meta)).catch(() => {})
+	}
+
+	function errorMessage(error : any | null, fallback : string) : string {
+		if (error == null) return fallback
+		const cause = error as Error
+		return cause.message == '' ? fallback : cause.message
+	}
+
+	function requestPage(reset : boolean) {
+		if (reset) {
+			pageNo.value = 1
+			hasMore.value = true
+			loading.value = true
+		} else {
+			if (!hasMore.value || loadingMore.value) return
+			loadingMore.value = true
+		}
+		const query = { page: pageNo.value, per_page: 15 } as UTSJSONObject
+		if (keyword.value.trim() != '') query['keyword'] = keyword.value.trim()
+		if (cityIndex.value > 0) query['city_code'] = cities.value[cityIndex.value - 1].code
+		if (positionIndex.value > 0) query['position_code'] = positions.value[positionIndex.value - 1].code
+		if (employmentIndex.value > 0) query['employment_type'] = employmentIndex.value
+		if (educationIndex.value > 0) query['education_level'] = educationIndex.value
+		searchJobs(query).then((result) => {
+			jobs.value = reset ? result.data : jobs.value.concat(result.data)
+			total.value = result.total
+			hasMore.value = result.current_page < result.last_page
+			if (hasMore.value) pageNo.value++
+			loading.value = false
+			loadingMore.value = false
+			refreshing.value = false
+		}).catch((error : any | null) => {
+			uni.showToast({ title: errorMessage(error, '职位搜索失败'), icon: 'none' })
+			loading.value = false
+			loadingMore.value = false
+			refreshing.value = false
+		})
+	}
+
+	function eventIndex(event : UTSJSONObject) : number {
+		const detail = event['detail'] as UTSJSONObject
+		return parseInt(detail['value'] as string)
+	}
+	function search() { requestPage(true) }
+	function onCityChange(event : UTSJSONObject) { cityIndex.value = eventIndex(event); search() }
+	function onPositionChange(event : UTSJSONObject) { positionIndex.value = eventIndex(event); search() }
+	function onEmploymentChange(event : UTSJSONObject) { employmentIndex.value = eventIndex(event); search() }
+	function onEducationChange(event : UTSJSONObject) { educationIndex.value = eventIndex(event); search() }
+	function refresh() { refreshing.value = true; requestPage(true) }
+	function loadMore() { requestPage(false) }
+	function clearFilters() {
+		keyword.value = ''
+		cityIndex.value = 0
+		positionIndex.value = 0
+		employmentIndex.value = 0
+		educationIndex.value = 0
+		search()
+	}
+
+	onLoad(() => prepareMeta())
+	onShow(() => { if (jobs.value.length == 0) requestPage(true) })
+</script>
+
+<style scoped>
+	.page { background-color: #f4f7f5; }
+	.search-panel { padding: 13px 15px 10px; background-color: #fff; }
+	.search-row, .filter-row, .summary { flex-direction: row; align-items: center; }
+	.search-input { flex: 1; height: 42px; padding: 0 14px; border-radius: 12px; background-color: #f3f6f5; font-size: 13px; }
+	.search-button { width: 66px; height: 42px; margin-left: 9px; padding: 0; line-height: 42px; border-radius: 12px; background-color: #19a974; color: #fff; font-size: 13px; }
+	.filters { margin-top: 11px; height: 34px; }
+	.filter-row { height: 34px; }
+	.filter { margin-right: 9px; padding: 7px 11px; border-radius: 17px; background-color: #f3f6f5; color: #56615c; font-size: 11px; white-space: nowrap; }
+	.content { flex: 1; }
+	.summary { padding: 13px 17px 11px; justify-content: space-between; }
+	.summary-text { color: #78817c; font-size: 11px; }
+	.clear { color: #159669; font-size: 11px; }
+	.state { padding: 100px 0; align-items: center; }
+	.state-text { color: #8a9099; }
+	.empty { margin: 60px 20px; padding: 36px 22px; align-items: center; border-radius: 16px; background-color: #fff; }
+	.empty-title { font-size: 17px; font-weight: 600; }
+	.empty-desc { margin-top: 8px; color: #8a9099; font-size: 12px; }
+	.list { padding-bottom: 90px; }
+	.more { padding: 8px 0 25px; color: #a0a6a2; text-align: center; font-size: 11px; }
+</style>

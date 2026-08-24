@@ -1,0 +1,49 @@
+export type ImParticipantUser = {
+	id : number
+	name : string | null
+	nickname : string | null
+	mask_name : string | null
+	avatar : string | null
+	display_avatar : string | null
+}
+
+export type ImParticipantIdentity = {
+	id : number
+	identity_type : number | null
+	identity_name : string | null
+	organization_name : string | null
+	job_title : string | null
+}
+
+export type ImParticipant = {
+	id : number
+	user_id : number
+	user_identity_id : number | null
+	external_user_id : string | null
+	im_user_id : string | null
+	user : ImParticipantUser | null
+	identity : ImParticipantIdentity | null
+}
+
+export type ImConversation = {
+	id : number
+	conversation_no : string
+	conversation_type : string | null
+	conversation_type_label : string | null
+	scene : string | null
+	metadata : UTSJSONObject | null
+	last_message_at : string | null
+	created_at : string | null
+	participants : ImParticipant[]
+	other_participants : ImParticipant[]
+}
+
+export type ImMessage = {
+	id : string
+	conversation_id : string
+	sender_user_id : string | null
+	message_type : string
+	client_msg_id : string | null
+	content : any | null
+	created_at : string | null
+}

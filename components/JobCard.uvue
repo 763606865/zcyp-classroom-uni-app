@@ -1,0 +1,65 @@
+<template>
+	<view class="card">
+		<view class="head">
+			<text class="title">{{ item.title }}</text>
+			<text class="salary">{{ salaryText(item) }}</text>
+		</view>
+		<text class="company">{{ item.company == null ? '招聘企业' : item.company!.name }}</text>
+		<view class="tags">
+			<text class="tag">{{ experienceText(item) }}</text>
+			<text class="tag">{{ educationText(item) }}</text>
+			<text class="tag">{{ employmentText(item) }}</text>
+		</view>
+		<view class="foot">
+			<text class="place">{{ placeText(item) }}</text>
+			<text v-if="item.position != null" class="position">{{ item.position!.name }}</text>
+		</view>
+	</view>
+</template>
+
+<script setup lang="uts">
+	import type { JobPreview } from '../types/discovery.uts'
+
+	defineProps<{ item : JobPreview }>()
+
+	function salaryText(item : JobPreview) : string {
+		if (item.salary_min == null && item.salary_max == null) return '薪资面议'
+		const min = item.salary_min == null ? '' : `${parseInt(item.salary_min!)}`
+		const max = item.salary_max == null ? '' : `${parseInt(item.salary_max!)}`
+		if (min != '' && max != '') return `${min}-${max}元`
+		return `${min}${max}元起`
+	}
+
+	function experienceText(item : JobPreview) : string {
+		if (item.experience_min == null && item.experience_max == null) return '经验不限'
+		if (item.experience_min == 0 && item.experience_max == 0) return '应届可投'
+		if (item.experience_min != null && item.experience_max != null) return `${item.experience_min}-${item.experience_max}年`
+		return item.experience_min == null ? `${item.experience_max}年以内` : `${item.experience_min}年以上`
+	}
+
+	function educationText(item : JobPreview) : string {
+		return item.education_level_label == null || item.education_level_label == '' ? '学历不限' : item.education_level_label!
+	}
+
+	function employmentText(item : JobPreview) : string {
+		return item.employment_type_label == null || item.employment_type_label == '' ? '招聘中' : item.employment_type_label!
+	}
+
+	function placeText(item : JobPreview) : string {
+		return item.workplace == null || item.workplace == '' ? '工作地点待沟通' : item.workplace!
+	}
+</script>
+
+<style scoped>
+	.card { margin: 0 16px 12px; padding: 18px; border-radius: 16px; background-color: #fff; }
+	.head, .tags, .foot { flex-direction: row; align-items: center; }
+	.head { justify-content: space-between; }
+	.title { flex: 1; font-size: 17px; font-weight: 700; color: #20252a; lines: 1; text-overflow: ellipsis; }
+	.salary { margin-left: 12px; color: #f06b36; font-size: 16px; font-weight: 700; }
+	.company { margin-top: 9px; color: #555e66; font-size: 13px; }
+	.tags { margin-top: 13px; }
+	.tag { margin-right: 8px; padding: 4px 8px; border-radius: 6px; background-color: #f3f6f5; color: #56615c; font-size: 11px; }
+	.foot { margin-top: 14px; padding-top: 12px; border-top: 1px solid #f1f2f3; }
+	.place { flex: 1; color: #8a9197; font-size: 11px; lines: 1; text-overflow: ellipsis; }
+	.position { color: #159669; font-size: 11px; }
+</style>

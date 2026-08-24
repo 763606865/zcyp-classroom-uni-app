@@ -1,0 +1,73 @@
+import type { AuthUser, LoginResult, UserIdentity } from '../types/auth.uts'
+
+const TOKEN_KEY = 'rc_access_token'
+const USER_KEY = 'rc_auth_user'
+
+let accessToken = ''
+let currentUser : AuthUser | null = null
+
+function parseStoredUser(value : any | null) : AuthUser | null {
+	if (value == null || value == '') return null
+	const text = typeof value == 'string' ? (value as string) : JSON.stringify(value)
+	if (text == '') return null
+	try {
+		const user = JSON.parse<AuthUser>(text)
+		return user == null ? null : user!
+	} catch (_) {
+		return null
+	}
+}
+
+export function hydrateAuth() {
+	const savedToken = uni.getStorageSync(TOKEN_KEY)
+	accessToken = savedToken == null || savedToken == '' ? '' : savedToken as string
+	const saved = uni.getStorageSync(USER_KEY)
+	currentUser = parseStoredUser(saved)
+}
+
+export function setSession(result : LoginResult) {
+	accessToken = result.access_token
+	currentUser = result.user
+	uni.setStorageSync(TOKEN_KEY, accessToken)
+	uni.setStorageSync(USER_KEY, JSON.stringify(result.user))
+}
+
+export function setUser(user : AuthUser) {
+	currentUser = user
+	uni.setStorageSync(USER_KEY, JSON.stringify(user))
+}
+
+export function clearSession() {
+	accessToken = ''
+	currentUser = null
+	uni.removeStorageSync(TOKEN_KEY)
+	uni.removeStorageSync(USER_KEY)
+}
+
+export function getToken() : string {
+	if (accessToken == '') hydrateAuth()
+	return accessToken
+}
+
+export function getUser() : AuthUser | null {
+	if (currentUser == null) hydrateAuth()
+	return currentUser
+}
+
+export function isLoggedIn() : boolean {
+	return getToken() != ''
+}
+
+export function getCurrentIdentity() : UserIdentity | null {
+	const user = getUser()
+	return user == null ? null : user.current_identity
+}
+
+export function getCurrentIdentityType() : number {
+	const identity = getCurrentIdentity()
+	return identity == null ? 1 : identity.identity_type
+}
+
+export function isRecruiter() : boolean {
+	return getCurrentIdentityType() == 2
+}

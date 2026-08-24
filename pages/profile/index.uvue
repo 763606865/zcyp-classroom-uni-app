@@ -1,0 +1,189 @@
+<template>
+	<scroll-view class="rc-page profile-page" scroll-y>
+		<view class="profile-header">
+			<view class="avatar">
+				<image v-if="user != null && hasText(user!.avatar)" class="avatar-image" :src="user!.avatar!" mode="aspectFill" />
+				<text v-else class="avatar-text">{{ initials }}</text>
+			</view>
+			<view v-if="user != null" class="user-main">
+				<text class="user-name">{{ displayName }}</text>
+				<text class="user-account">{{ displayAccount }}</text>
+			</view>
+			<view v-else class="user-main" @click="goLogin">
+				<text class="user-name">登录 / 注册</text>
+				<text class="user-account">登录后管理简历与招聘事务</text>
+			</view>
+		</view>
+
+		<view v-if="user != null" class="identity-card" @click="openIdentitySelector">
+			<view>
+				<text class="section-label">当前身份</text>
+				<text class="identity-name">{{ identityName }}</text>
+				<text v-if="organizationName != ''" class="organization-name">{{ organizationName }}</text>
+			</view>
+			<text class="switch-action">切换身份 ›</text>
+		</view>
+
+		<view class="menu-card">
+			<view v-for="item in menus" :key="item.label" class="menu-row" @click="handleMenu(item.action)">
+				<text class="menu-icon">{{ item.icon }}</text>
+				<text class="menu-label">{{ item.label }}</text>
+				<text class="menu-arrow">›</text>
+			</view>
+		</view>
+
+		<button v-if="user != null" class="logout-button" @click="confirmLogout">退出登录</button>
+		<text class="version">中测易招 · 当前版本 {{ version }}</text>
+	</scroll-view>
+	<RcTabBar current-path="/pages/profile/index" />
+</template>
+
+<script setup lang="uts">
+	import RcTabBar from '../../components/RcTabBar.uvue'
+	import { clearSession, getUser, setSession } from '../../stores/auth.uts'
+	import { logout, refreshTokenByIdentityType } from '../../api/auth.uts'
+	import type { AuthUser } from '../../types/auth.uts'
+
+	type MenuItem = { label : string, icon : string, action : string }
+
+	const user = ref<AuthUser | null>(null)
+	const version = ref('1.0.0')
+	const menus : MenuItem[] = [
+		{ label: '我的简历', icon: '⌑', action: 'resume' },
+		{ label: '账号与安全', icon: '◎', action: 'account' },
+		{ label: '隐私设置', icon: '◉', action: 'privacy' },
+		{ label: '我的收藏', icon: '☆', action: 'favorites' },
+		{ label: '帮助与反馈', icon: '?', action: 'feedback' },
+		{ label: '关于我们', icon: 'i', action: 'about' }
+	]
+
+	function hasText(value : string | null) : boolean {
+		return value != null && value != ''
+	}
+
+	const displayName = computed(() : string => {
+		if (user.value == null) return ''
+		if (hasText(user.value!.name)) return user.value!.name!
+		return hasText(user.value!.nickname) ? user.value!.nickname! : 'Rc用户'
+	})
+	const displayAccount = computed(() : string => {
+		if (user.value == null) return ''
+		if (hasText(user.value!.phone)) return user.value!.phone!
+		return hasText(user.value!.email) ? user.value!.email! : ''
+	})
+	const initials = computed(() : string => {
+		const name = displayName.value
+		return name == '' ? 'Rc' : name.substring(0, 1)
+	})
+	const identityName = computed(() : string => {
+		const identity = user.value == null ? null : user.value!.current_identity
+		return identity == null ? '求职者' : identity.identity_name
+	})
+	const organizationName = computed(() : string => {
+		const identity = user.value == null ? null : user.value!.current_identity
+		if (identity == null) return ''
+		if (hasText(identity.organization_name)) return identity.organization_name!
+		return identity.organization == null ? '' : identity.organization!.name
+	})
+
+	onShow(() => {
+		user.value = getUser()
+		const appVersion = uni.getAppBaseInfo().appVersion
+		version.value = appVersion == null || appVersion == '' ? '1.0.0' : appVersion
+	})
+
+	function errorMessage(error : any | null, fallback : string) : string {
+		return fallback
+	}
+
+	function goLogin() {
+		uni.navigateTo({ url: '/pages/auth/login?redirect=' + encodeURIComponent('/pages/profile/index') })
+	}
+
+	function switchIdentity(identityType : number) {
+		const current = user.value == null ? null : user.value!.current_identity
+		if (current != null && current.identity_type == identityType) return
+		uni.showLoading({ title: '正在切换' })
+		refreshTokenByIdentityType(identityType).then((result) => {
+			setSession(result)
+			user.value = result.user
+			uni.showToast({ title: '身份已切换', icon: 'success' })
+			const destination = identityType == 2 ? '/pages/talents/index' : '/pages/jobs/index'
+			setTimeout(() => {
+				uni.reLaunch({ url: destination })
+			}, 300)
+			uni.hideLoading()
+		}).catch((error : any | null) => {
+			uni.showToast({ title: errorMessage(error, '身份切换失败'), icon: 'none' })
+			uni.hideLoading()
+		})
+	}
+
+	function openIdentitySelector() {
+		uni.showActionSheet({
+			itemList: ['求职者', '招聘方'],
+			success: (result) => {
+				switchIdentity(result.tapIndex == 0 ? 1 : 2)
+			}
+		})
+	}
+
+	function handleMenu(action : string) {
+		if (user.value == null) {
+			goLogin()
+			return
+		}
+		if (action == 'resume') {
+			const identity = user.value!.current_identity
+			if (identity != null && identity.identity_type != 1) {
+				uni.showToast({ title: '请先切换到求职者身份', icon: 'none' })
+				return
+			}
+			uni.navigateTo({ url: '/pages/resume/index' })
+			return
+		}
+		uni.showToast({ title: '功能即将开放', icon: 'none' })
+	}
+
+	function confirmLogout() {
+		uni.showModal({
+			title: '退出登录',
+			content: '确定要退出当前账号吗？',
+				success: (result) => {
+				if (!result.confirm) return
+				logout().then(() => {
+					clearSession()
+					user.value = null
+					uni.reLaunch({ url: '/pages/jobs/index' })
+				}).catch(() => {
+					clearSession()
+					user.value = null
+					uni.reLaunch({ url: '/pages/jobs/index' })
+				})
+			}
+		})
+	}
+</script>
+
+<style scoped>
+	.profile-page { padding-bottom: 90px; }
+	.profile-header { padding: 28px 22px 22px; flex-direction: row; align-items: center; background-color: #ecf9f3; }
+	.avatar { width: 64px; height: 64px; border-radius: 32px; align-items: center; justify-content: center; background-color: #19a974; overflow: hidden; }
+	.avatar-image { width: 64px; height: 64px; }
+	.avatar-text { color: #fff; font-size: 22px; font-weight: 700; }
+	.user-main { flex: 1; margin-left: 16px; }
+	.user-name { font-size: 21px; font-weight: 700; }
+	.user-account { margin-top: 6px; color: #718078; font-size: 13px; }
+	.identity-card { margin: 14px 16px; padding: 18px; border-radius: 14px; background-color: #fff; flex-direction: row; justify-content: space-between; align-items: center; }
+	.section-label { font-size: 11px; color: #9aa0a6; }
+	.identity-name { margin-top: 6px; font-size: 17px; font-weight: 600; }
+	.organization-name { margin-top: 4px; color: #6e757b; font-size: 12px; }
+	.switch-action { color: #159669; font-size: 13px; }
+	.menu-card { margin: 14px 16px; border-radius: 14px; background-color: #fff; overflow: hidden; }
+	.menu-row { height: 54px; padding: 0 18px; flex-direction: row; align-items: center; border-bottom: 1px solid #f1f2f4; }
+	.menu-icon { width: 28px; color: #19a974; font-size: 18px; }
+	.menu-label { flex: 1; font-size: 15px; }
+	.menu-arrow { color: #c0c5ca; font-size: 22px; }
+	.logout-button { margin: 20px 16px 0; height: 46px; line-height: 46px; color: #e24a4a; background-color: #fff; border-radius: 12px; font-size: 15px; }
+	.version { padding: 20px 0 10px; text-align: center; color: #a5abb1; font-size: 11px; }
+</style>

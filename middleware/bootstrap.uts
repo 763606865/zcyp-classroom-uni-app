@@ -1,0 +1,15 @@
+import { hydrateAuth, isLoggedIn, setUser } from '../stores/auth.uts'
+import { getMe } from '../api/auth.uts'
+import { checkAppVersion } from './version.uts'
+
+export function bootstrapApp() {
+	hydrateAuth()
+	checkAppVersion()
+	if (isLoggedIn()) {
+		getMe().then((user) => {
+			setUser(user)
+		}).catch(() => {
+			// 401 由请求层统一清理，其余错误保留离线会话。
+		})
+	}
+}

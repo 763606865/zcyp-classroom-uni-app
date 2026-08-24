@@ -1,0 +1,29 @@
+<template>
+	<view class="empty">
+		<text class="empty-icon-text">{{ icon }}</text>
+		<text class="empty-title">{{ title }}</text>
+		<text class="empty-description">{{ description }}</text>
+	</view>
+</template>
+
+<script setup lang="uts">
+	defineProps({
+		icon: { type: String, default: '◇' },
+		title: { type: String, default: '功能建设中' },
+		description: { type: String, default: '基础骨架已就绪，业务功能将陆续接入' }
+	})
+</script>
+
+<style scoped>
+	.empty {
+		margin: 90px 24px 0;
+		align-items: center;
+		padding: 36px 20px;
+		background-color: #ffffff;
+		border-radius: 16px;
+	}
+	.empty-icon { width: 40px; height: 40px; align-items: center; justify-content: center; }
+	.empty-icon-text { font-size: 40px; color: #19a974; }
+	.empty-title { margin-top: 16px; font-size: 18px; font-weight: 600; }
+	.empty-description { margin-top: 8px; font-size: 13px; color: #8a9099; text-align: center; }
+</style>

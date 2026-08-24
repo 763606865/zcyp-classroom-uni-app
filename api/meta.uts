@@ -1,0 +1,41 @@
+import { request } from '../services/http.uts'
+import type { RcMeta } from '../types/meta.uts'
+
+const META_CACHE_KEY = 'rc_meta_cache_v1'
+const META_CACHE_TIME_KEY = 'rc_meta_cache_time_v1'
+const META_CACHE_TTL = 7 * 24 * 60 * 60 * 1000
+
+function parseMeta(data : any | null) : RcMeta {
+	const result = JSON.parse<RcMeta>(JSON.stringify(data))
+	if (result == null) throw new Error('元数据解析失败')
+	return result!
+}
+
+export function getCachedMeta() : RcMeta | null {
+	const saved = uni.getStorageSync(META_CACHE_KEY)
+	if (saved == null || saved == '') return null
+	try {
+		const text = typeof saved == 'string' ? saved as string : JSON.stringify(saved)
+		return parseMeta(JSON.parse(text))
+	} catch (_) {
+		return null
+	}
+}
+
+export function getMeta(force : boolean = false) : Promise<RcMeta> {
+	const cached = getCachedMeta()
+	const savedAtValue = uni.getStorageSync(META_CACHE_TIME_KEY)
+	const savedAt = savedAtValue == null || savedAtValue == '' ? 0 : parseInt(`${savedAtValue}`)
+	if (!force && cached != null && Date.now() - savedAt < META_CACHE_TTL) {
+		return Promise.resolve(cached!)
+	}
+	return request<UTSJSONObject>('/rc/meta').then((data : UTSJSONObject) : RcMeta => {
+		const meta = parseMeta(data)
+		uni.setStorageSync(META_CACHE_KEY, JSON.stringify(meta))
+		uni.setStorageSync(META_CACHE_TIME_KEY, `${Date.now()}`)
+		return meta
+	}).catch((error : any | null) : RcMeta => {
+		if (cached != null) return cached!
+		throw new Error('元数据加载失败')
+	})
+}

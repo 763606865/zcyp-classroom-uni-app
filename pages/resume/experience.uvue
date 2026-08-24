@@ -1,0 +1,186 @@
+<template>
+	<scroll-view class="page" scroll-y>
+		<view class="form-card">
+			<text class="section-title">{{ type == 'work' ? '工作经历' : '教育经历' }}</text>
+			<template v-if="type == 'work'">
+				<view class="field"><text class="label">公司名称 *</text><input v-model="form.primary_name" class="input" placeholder="请输入公司名称" /></view>
+				<view class="field"><text class="label">职位名称 *</text><input v-model="form.secondary_name" class="input" placeholder="请输入职位名称" /></view>
+				<view class="field"><text class="label">所在部门</text><input v-model="form.extra_name" class="input" placeholder="选填" /></view>
+			</template>
+			<template v-else>
+				<view class="field"><text class="label">学校名称 *</text><input v-model="form.primary_name" class="input" placeholder="请输入学校名称" /></view>
+				<view class="field"><text class="label">专业名称</text><input v-model="form.secondary_name" class="input" placeholder="选填" /></view>
+				<view class="field"><text class="label">学历</text><picker class="picker" :range="degreeLabels" :value="form.degree" @change="onDegreeChange"><text>{{ degreeLabels[form.degree] }}</text></picker></view>
+			</template>
+			<view class="field"><text class="label">开始日期 *</text><picker class="picker" mode="date" :value="form.start_date" @change="onStartChange"><text>{{ form.start_date == '' ? '请选择' : form.start_date }}</text></picker></view>
+			<view v-if="form.is_current == 0" class="field"><text class="label">结束日期</text><picker class="picker" mode="date" :value="form.end_date" @change="onEndChange"><text>{{ form.end_date == '' ? '请选择' : form.end_date }}</text></picker></view>
+			<view class="field"><text class="label">{{ type == 'work' ? '仍在职' : '仍在读' }}</text><switch color="#19a974" :checked="form.is_current == 1" @change="onCurrentChange" /></view>
+			<view class="textarea-field"><text class="label">经历描述</text><textarea v-model="form.description" class="textarea" maxlength="2000" placeholder="描述职责、成果或学习经历" /></view>
+		</view>
+		<button class="save-button" :loading="saving" @click="save">保存</button>
+	</scroll-view>
+</template>
+
+<script setup lang="uts">
+	import { createResumeEducation, createResumeWork, getResumeEducations, getResumeWorks, updateResumeEducation, updateResumeWork } from '../../api/resume.uts'
+	import type { ResumeEducation, ResumeWork } from '../../types/resume.uts'
+
+	const degreeLabels : string[] = ['请选择', '高中/中专', '专科', '本科', '硕士', '博士', '其他']
+	const resumeId = ref(0)
+	const recordId = ref(0)
+	const type = ref('work')
+	const saving = ref(false)
+	type ExperienceForm = {
+		primary_name : string
+		secondary_name : string
+		extra_name : string
+		degree : number
+		start_date : string
+		end_date : string
+		is_current : number
+		description : string
+	}
+	const form = reactive<ExperienceForm>({
+		primary_name: '',
+		secondary_name: '',
+		extra_name: '',
+		degree: 0,
+		start_date: '',
+		end_date: '',
+		is_current: 0,
+		description: ''
+	})
+
+	function hasText(value : string | null) : boolean {
+		return value != null && value != ''
+	}
+
+	function showError(message : string) { uni.showToast({ title: message, icon: 'none' }) }
+
+	function errorMessage(error : any | null, fallback : string) : string {
+		return fallback
+	}
+
+	function trimText(value : any | null) : string {
+		if (value == null) return ''
+		return (value as string).trim()
+	}
+
+	function loadRecord() {
+		if (type.value == 'work') {
+			getResumeWorks(resumeId.value).then((items : ResumeWork[]) => {
+				const item = items.find((row : ResumeWork) : boolean => row.id == recordId.value)
+				if (item == null) return
+				form.primary_name = item.company_name
+				form.secondary_name = item.position
+				form.extra_name = hasText(item.department) ? item.department! : ''
+				form.start_date = hasText(item.start_date) ? item.start_date! : ''
+				form.end_date = hasText(item.end_date) ? item.end_date! : ''
+				form.is_current = item.is_current
+				form.description = hasText(item.description) ? item.description! : ''
+			})
+			return
+		}
+		getResumeEducations(resumeId.value).then((items : ResumeEducation[]) => {
+			const item = items.find((row : ResumeEducation) : boolean => row.id == recordId.value)
+			if (item == null) return
+			form.primary_name = item.school_name
+			form.secondary_name = hasText(item.major) ? item.major! : ''
+			form.degree = item.degree == null ? 0 : item.degree!
+			form.start_date = hasText(item.start_date) ? item.start_date! : ''
+			form.end_date = hasText(item.end_date) ? item.end_date! : ''
+			form.is_current = item.is_current
+			form.description = hasText(item.description) ? item.description! : ''
+		})
+	}
+
+	onLoad((options : UTSJSONObject) => {
+		resumeId.value = parseInt(options['resumeId'] as string)
+		const typeValue = options['type'] as string | null
+		type.value = typeValue == null || typeValue == '' ? 'work' : typeValue
+		const recordIdValue = options['recordId'] as string | null
+		if (recordIdValue != null && recordIdValue != '') {
+			recordId.value = parseInt(recordIdValue)
+			loadRecord()
+		}
+	})
+
+	function eventValue(event : UTSJSONObject) : any | null {
+		const detail = event['detail'] as UTSJSONObject | null
+		return detail == null ? null : detail!['value']
+	}
+
+	function onDegreeChange(event : UTSJSONObject) { form.degree = parseInt(eventValue(event) as string) }
+	function onStartChange(event : UTSJSONObject) { form.start_date = eventValue(event) as string }
+	function onEndChange(event : UTSJSONObject) { form.end_date = eventValue(event) as string }
+	function onCurrentChange(event : any) {
+		form.is_current = eventValue(event as UTSJSONObject) == true ? 1 : 0
+		if (form.is_current == 1) form.end_date = ''
+	}
+
+	function save() {
+		const primaryName = trimText(form.primary_name)
+		const secondaryName = trimText(form.secondary_name)
+		const extraName = trimText(form.extra_name)
+		const description = trimText(form.description)
+		if (primaryName == '') return showError(type.value == 'work' ? '请填写公司名称' : '请填写学校名称')
+		if (type.value == 'work' && secondaryName == '') return showError('请填写职位名称')
+		if (form.start_date == '') return showError('请选择开始日期')
+		const common = {
+			start_date: form.start_date,
+			end_date: form.is_current == 1 || form.end_date == '' ? null : form.end_date,
+			is_current: form.is_current,
+			description: description == '' ? null : description
+		} as UTSJSONObject
+		saving.value = true
+		if (type.value == 'work') {
+			common['company_name'] = primaryName
+			common['position'] = secondaryName
+			common['department'] = extraName == '' ? null : extraName
+			const task = recordId.value > 0
+				? updateResumeWork(resumeId.value, recordId.value, common)
+				: createResumeWork(resumeId.value, common)
+			task.then(() => {
+				uni.showToast({ title: '保存成功', icon: 'success' })
+				setTimeout(() => {
+					uni.navigateBack()
+				}, 300)
+				saving.value = false
+			}).catch((error : any | null) => {
+				showError(errorMessage(error, '保存失败'))
+				saving.value = false
+			})
+			return
+		} else {
+			common['school_name'] = primaryName
+			common['major'] = secondaryName == '' ? null : secondaryName
+			common['degree'] = form.degree == 0 ? null : form.degree
+			common['education_type'] = 1
+		}
+		const task = recordId.value > 0
+			? updateResumeEducation(resumeId.value, recordId.value, common)
+			: createResumeEducation(resumeId.value, common)
+		task.then(() => {
+			uni.showToast({ title: '保存成功', icon: 'success' })
+			setTimeout(() => {
+				uni.navigateBack()
+			}, 300)
+			saving.value = false
+		}).catch((error : any | null) => {
+			showError(errorMessage(error, '保存失败'))
+			saving.value = false
+		})
+	}
+</script>
+
+<style scoped>
+	.page { flex: 1; background-color: #f6f7f9; }
+	.form-card { margin: 14px 16px; padding: 18px; border-radius: 14px; background-color: #fff; }
+	.section-title { margin-bottom: 8px; font-size: 17px; font-weight: 700; }
+	.field { min-height: 55px; flex-direction: row; align-items: center; border-bottom: 1px solid #f0f1f3; }
+	.label { width: 112px; color: #4e555b; font-size: 14px; }
+	.input, .picker { flex: 1; text-align: right; font-size: 14px; }
+	.textarea-field { padding: 16px 0 4px; }
+	.textarea { margin-top: 10px; width: 100%; height: 130px; padding: 12px; border-radius: 10px; background-color: #f7f8f9; font-size: 14px; }
+	.save-button { margin: 22px 16px 30px; height: 48px; line-height: 48px; border-radius: 12px; color: #fff; background-color: #19a974; font-size: 16px; font-weight: 600; }
+</style>

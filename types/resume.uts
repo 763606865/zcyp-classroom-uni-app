@@ -1,0 +1,58 @@
+export type ResumeStats = {
+	views : number
+	applications : number
+}
+
+export type Resume = {
+	id : number
+	user_id : number
+	resume_no : string
+	title : string
+	full_name : string
+	avatar : string | null
+	display_avatar : string | null
+	gender : number
+	birth_date : string | null
+	age : number | null
+	current_identity : number
+	work_years : number | null
+	highest_education_level : number | null
+	is_fresh_graduate : number
+	expected_salary_min : number | null
+	expected_salary_max : number | null
+	expected_salary_unit : number
+	current_residence_city : string | null
+	current_city_code : string | null
+	phone : string
+	email : string
+	is_primary : number
+	status : number
+	file_name : string | null
+	display_file_url : string | null
+	updated_at : string | null
+	stats : ResumeStats | null
+}
+
+export type ResumeWork = {
+	id : number
+	company_name : string
+	department : string | null
+	position : string
+	employment_type : number | null
+	start_date : string | null
+	end_date : string | null
+	is_current : number
+	description : string | null
+}
+
+export type ResumeEducation = {
+	id : number
+	school_name : string
+	major : string | null
+	degree : number | null
+	education_type : number
+	start_date : string | null
+	end_date : string | null
+	is_current : number
+	description : string | null
+}

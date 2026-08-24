@@ -1,0 +1,140 @@
+<template>
+	<view class="rc-page page">
+		<view class="hero">
+			<view>
+				<text class="hero-title">为你推荐</text>
+				<text class="hero-subtitle">匹配你的求职意向与当前位置</text>
+			</view>
+			<picker v-if="cityLabels.length > 1" :range="cityLabels" :value="cityIndex" @change="onCityChange">
+				<view class="city-button"><text class="city-button-text">{{ cityLabels[cityIndex] }}⌄</text></view>
+			</picker>
+		</view>
+		<scroll-view class="content" scroll-y refresher-enabled :refresher-triggered="refreshing"
+			@refresherrefresh="refresh" @scrolltolower="loadMore">
+			<view v-if="loading && jobs.length == 0" class="state"><text class="state-text">正在匹配好职位...</text></view>
+			<view v-else-if="jobs.length == 0" class="empty">
+				<text class="empty-title">暂时没有合适职位</text>
+				<text class="empty-desc">换个城市试试，新的职位会持续更新</text>
+				<button class="retry" @click="refresh">重新加载</button>
+			</view>
+			<view v-else class="list">
+				<JobCard v-for="item in jobs" :key="item.id" :item="item" />
+				<text class="more">{{ loadingMore ? '正在加载...' : (hasMore ? '上拉加载更多' : '已经到底了') }}</text>
+			</view>
+		</scroll-view>
+		<RcTabBar current-path="/pages/jobs/index" />
+	</view>
+</template>
+
+<script setup lang="uts">
+	import RcTabBar from '../../components/RcTabBar.uvue'
+	import JobCard from '../../components/JobCard.uvue'
+	import { getRecommendedJobs } from '../../api/discovery.uts'
+	import { getCachedMeta, getMeta } from '../../api/meta.uts'
+	import { isLoggedIn } from '../../stores/auth.uts'
+	import type { JobPreview } from '../../types/discovery.uts'
+	import type { MetaTreeItem, RcMeta } from '../../types/meta.uts'
+
+	const jobs = ref<JobPreview[]>([])
+	const cities = ref<MetaTreeItem[]>([])
+	const cityLabels = ref<string[]>(['全国'])
+	const cityIndex = ref(0)
+	const pageNo = ref(1)
+	const hasMore = ref(true)
+	const loading = ref(false)
+	const loadingMore = ref(false)
+	const refreshing = ref(false)
+
+	function flattenCities(nodes : MetaTreeItem[], result : MetaTreeItem[]) {
+		nodes.forEach((item) => {
+			if (item.level == 2) result.push(item)
+			if (item.children.length > 0) flattenCities(item.children, result)
+		})
+	}
+
+	function applyMeta(meta : RcMeta) {
+		const result : MetaTreeItem[] = []
+		flattenCities(meta.areas, result)
+		cities.value = result
+		cityLabels.value = ['全国'].concat(result.map((item) : string => item.name))
+	}
+
+	function prepareMeta() {
+		const cached = getCachedMeta()
+		if (cached != null) applyMeta(cached!)
+		if (!isLoggedIn()) return
+		getMeta().then((meta) => applyMeta(meta)).catch(() => {})
+	}
+
+	function errorMessage(error : any | null, fallback : string) : string {
+		if (error == null) return fallback
+		const cause = error as Error
+		return cause.message == '' ? fallback : cause.message
+	}
+
+	function requestPage(reset : boolean) {
+		if (reset) {
+			pageNo.value = 1
+			hasMore.value = true
+			loading.value = true
+		} else {
+			if (!hasMore.value || loadingMore.value) return
+			loadingMore.value = true
+		}
+		const query = { page: pageNo.value, per_page: 15 } as UTSJSONObject
+		if (cityIndex.value > 0) query['city_code'] = cities.value[cityIndex.value - 1].code
+		getRecommendedJobs(query).then((result) => {
+			jobs.value = reset ? result.data : jobs.value.concat(result.data)
+			hasMore.value = result.current_page < result.last_page
+			if (hasMore.value) pageNo.value++
+			loading.value = false
+			loadingMore.value = false
+			refreshing.value = false
+		}).catch((error : any | null) => {
+			uni.showToast({ title: errorMessage(error, '职位加载失败'), icon: 'none' })
+			loading.value = false
+			loadingMore.value = false
+			refreshing.value = false
+		})
+	}
+
+	function refresh() {
+		refreshing.value = true
+		requestPage(true)
+	}
+
+	function loadMore() { requestPage(false) }
+
+	function eventValue(event : UTSJSONObject) : any | null {
+		const detail = event['detail'] as UTSJSONObject | null
+		return detail == null ? null : detail!['value']
+	}
+
+	function onCityChange(event : UTSJSONObject) {
+		cityIndex.value = parseInt(eventValue(event) as string)
+		requestPage(true)
+	}
+
+	onLoad(() => prepareMeta())
+	onShow(() => {
+		if (jobs.value.length == 0) requestPage(true)
+	})
+</script>
+
+<style scoped>
+	.page { background-color: #f4f7f5; }
+	.hero { padding: 18px 18px 14px; flex-direction: row; align-items: center; justify-content: space-between; background-color: #fff; }
+	.hero-title { font-size: 23px; font-weight: 700; color: #1d2521; }
+	.hero-subtitle { margin-top: 5px; color: #87908b; font-size: 11px; }
+	.city-button { padding: 8px 11px; border-radius: 18px; background-color: #edf8f3; }
+	.city-button-text { color: #159669; font-size: 12px; }
+	.content { flex: 1; padding-top: 14px; }
+	.state { padding: 110px 0; align-items: center; }
+	.state-text { color: #8a9099; }
+	.empty { margin: 70px 20px; padding: 36px 22px; align-items: center; border-radius: 16px; background-color: #fff; }
+	.empty-title { font-size: 18px; font-weight: 600; }
+	.empty-desc { margin-top: 8px; color: #8a9099; font-size: 12px; }
+	.retry { margin-top: 20px; width: 140px; height: 40px; line-height: 40px; border-radius: 20px; background-color: #19a974; color: #fff; font-size: 13px; }
+	.list { padding-bottom: 90px; }
+	.more { padding: 8px 0 25px; color: #a0a6a2; text-align: center; font-size: 11px; }
+</style>

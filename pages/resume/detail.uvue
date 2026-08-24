@@ -1,0 +1,231 @@
+<template>
+	<scroll-view class="page" scroll-y>
+		<view v-if="loading" class="state"><text class="state-text">正在加载简历...</text></view>
+		<view v-else-if="resume != null">
+			<view class="hero">
+				<view class="avatar">
+					<image v-if="hasText(resume!.display_avatar)" class="avatar-image" :src="resume!.display_avatar!" mode="aspectFill" />
+					<text v-else class="avatar-text">{{ resume!.full_name.substring(0, 1) }}</text>
+				</view>
+				<view class="hero-main">
+					<view class="name-row">
+						<text class="name">{{ resume!.full_name }}</text>
+						<text v-if="resume!.is_primary == 1" class="tag">主简历</text>
+					</view>
+					<text class="summary">{{ summary }}</text>
+					<text class="contact">{{ resume!.phone }} · {{ resume!.email }}</text>
+				</view>
+				<text class="edit" @click="editResume">编辑</text>
+			</view>
+
+			<view class="stats-card">
+				<view class="stat"><text class="stat-value">{{ resume!.stats == null ? 0 : resume!.stats!.views }}</text><text class="stat-label">被浏览</text></view>
+				<view class="divider"></view>
+				<view class="stat"><text class="stat-value">{{ resume!.stats == null ? 0 : resume!.stats!.applications }}</text><text class="stat-label">已投递</text></view>
+				<view class="divider"></view>
+				<view class="stat"><text class="stat-value">{{ completion }}%</text><text class="stat-label">完整度</text></view>
+			</view>
+
+			<view class="section">
+				<view class="section-head"><text class="section-title">工作经历</text><text class="add" @click="addExperience('work')">＋ 添加</text></view>
+				<view v-if="works.length == 0" class="section-empty"><text class="section-empty-text">补充工作经历，提升简历竞争力</text></view>
+				<view v-for="item in works" :key="item.id" class="experience">
+					<view class="experience-head">
+						<view><text class="experience-title">{{ item.company_name }}</text><text class="experience-sub">{{ item.position }}{{ suffixText(item.department) }}</text></view>
+						<text class="more" @click="manageWork(item.id)">•••</text>
+					</view>
+					<text class="date">{{ dateRange(item.start_date, item.end_date, item.is_current) }}</text>
+					<text v-if="hasText(item.description)" class="description">{{ item.description }}</text>
+				</view>
+			</view>
+
+			<view class="section">
+				<view class="section-head"><text class="section-title">教育经历</text><text class="add" @click="addExperience('education')">＋ 添加</text></view>
+				<view v-if="educations.length == 0" class="section-empty"><text class="section-empty-text">补充教育经历，让招聘方更了解你</text></view>
+				<view v-for="item in educations" :key="item.id" class="experience">
+					<view class="experience-head">
+						<view><text class="experience-title">{{ item.school_name }}</text><text class="experience-sub">{{ degreeLabel(item.degree) }}{{ suffixText(item.major) }}</text></view>
+						<text class="more" @click="manageEducation(item.id)">•••</text>
+					</view>
+					<text class="date">{{ dateRange(item.start_date, item.end_date, item.is_current) }}</text>
+					<text v-if="hasText(item.description)" class="description">{{ item.description }}</text>
+				</view>
+			</view>
+
+			<view v-if="hasText(resume!.display_file_url)" class="section attachment" @click="previewAttachment">
+				<view><text class="section-title">附件简历</text><text class="attachment-name">{{ fileNameText }}</text></view>
+				<text class="arrow">›</text>
+			</view>
+			<view class="safe-bottom"></view>
+		</view>
+	</scroll-view>
+</template>
+
+<script setup lang="uts">
+	import { deleteResumeEducation, deleteResumeWork, getResume, getResumeEducations, getResumeWorks } from '../../api/resume.uts'
+	import type { Resume, ResumeEducation, ResumeWork } from '../../types/resume.uts'
+
+	const resumeId = ref(0)
+	const resume = ref<Resume | null>(null)
+	const works = ref<ResumeWork[]>([])
+	const educations = ref<ResumeEducation[]>([])
+	const loading = ref(false)
+
+	function hasText(value : string | null) : boolean {
+		return value != null && value != ''
+	}
+
+	function suffixText(value : string | null) : string {
+		return hasText(value) ? ' · ' + value! : ''
+	}
+
+	function errorMessage(error : any | null, fallback : string) : string {
+		return fallback
+	}
+
+	function degreeLabel(value : number | null) : string {
+		const labels = ['未填写', '高中/中专', '专科', '本科', '硕士', '博士', '其他']
+		if (value == null || value < 1 || value >= labels.length) return labels[0]
+		return labels[value]
+	}
+
+	const summary = computed(() : string => {
+		if (resume.value == null) return ''
+		const parts : string[] = []
+		if (resume.value!.age != null) parts.push(`${resume.value!.age}岁`)
+		if (resume.value!.work_years != null) parts.push(resume.value!.work_years == 0 ? '应届生' : `${resume.value!.work_years}年经验`)
+		if (resume.value!.highest_education_level != null) parts.push(degreeLabel(resume.value!.highest_education_level))
+		if (hasText(resume.value!.current_residence_city)) parts.push(resume.value!.current_residence_city!)
+		return parts.length == 0 ? '基本信息待完善' : parts.join(' · ')
+	})
+
+	const completion = computed(() : number => {
+		if (resume.value == null) return 0
+		let score = 40
+		if (hasText(resume.value!.birth_date)) score += 10
+		if (resume.value!.highest_education_level != null && resume.value!.highest_education_level! > 0) score += 10
+		if (hasText(resume.value!.current_residence_city)) score += 10
+		if (works.value.length > 0) score += 15
+		if (educations.value.length > 0) score += 15
+		return score
+	})
+	const fileNameText = computed(() : string => {
+		if (resume.value == null) return '查看附件简历'
+		return hasText(resume.value!.file_name) ? resume.value!.file_name! : '查看附件简历'
+	})
+
+	function load() {
+		if (resumeId.value <= 0) return
+		loading.value = true
+		getResume(resumeId.value).then((item) => {
+			resume.value = item
+			loading.value = false
+		}).catch((error : any | null) => {
+			uni.showToast({ title: errorMessage(error, '简历加载失败'), icon: 'none' })
+			loading.value = false
+		})
+		getResumeWorks(resumeId.value).then((items) => {
+			works.value = items
+		})
+		getResumeEducations(resumeId.value).then((items) => {
+			educations.value = items
+		})
+	}
+
+	onLoad((options : UTSJSONObject) => {
+		resumeId.value = parseInt(options['id'] as string)
+	})
+
+	onShow(() => { load() })
+
+	function editResume() { uni.navigateTo({ url: `/pages/resume/edit?id=${resumeId.value}` }) }
+	function addExperience(type : string) { uni.navigateTo({ url: `/pages/resume/experience?resumeId=${resumeId.value}&type=${type}` }) }
+
+	function showManageSheet(type : string, id : number) {
+		uni.showActionSheet({
+			itemList: ['编辑', '删除'],
+			success: (result) => {
+				if (result.tapIndex == 0) {
+					uni.navigateTo({ url: `/pages/resume/experience?resumeId=${resumeId.value}&type=${type}&recordId=${id}` })
+					return
+				}
+				uni.showModal({
+					title: '确认删除',
+					content: '删除后无法恢复，是否继续？',
+					success: (modal) => {
+						if (!modal.confirm) return
+						const task = type == 'work'
+							? deleteResumeWork(resumeId.value, id)
+							: deleteResumeEducation(resumeId.value, id)
+						task.then(() => {
+							uni.showToast({ title: '已删除', icon: 'success' })
+							load()
+						}).catch((error : any | null) => uni.showToast({ title: errorMessage(error, '删除失败'), icon: 'none' }))
+					}
+				})
+			}
+		})
+	}
+
+	function manageWork(id : number) {
+		showManageSheet('work', id)
+	}
+
+	function manageEducation(id : number) {
+		showManageSheet('education', id)
+	}
+
+	function dateRange(start : string | null, end : string | null, current : number) : string {
+		const startText = start == null ? '未填写' : start.substring(0, 7)
+		const endText = current == 1 ? '至今' : (end == null ? '未填写' : end.substring(0, 7))
+		return `${startText} — ${endText}`
+	}
+
+	function previewAttachment() {
+		if (resume.value == null || !hasText(resume.value!.display_file_url)) return
+		uni.downloadFile({
+			url: resume.value!.display_file_url!,
+			success: (result) => {
+				uni.openDocument({ filePath: result.tempFilePath })
+			},
+			fail: () => uni.showToast({ title: '附件打开失败', icon: 'none' })
+		})
+	}
+</script>
+
+<style scoped>
+	.page { flex: 1; background-color: #f6f7f9; }
+	.state { padding: 100px 0; align-items: center; }
+	.state-text { color: #8a9099; }
+	.hero { padding: 24px 20px; flex-direction: row; align-items: center; background-color: #ecf9f3; }
+	.avatar { width: 64px; height: 64px; border-radius: 32px; align-items: center; justify-content: center; overflow: hidden; background-color: #19a974; }
+	.avatar-image { width: 64px; height: 64px; }
+	.avatar-text { color: #fff; font-size: 22px; font-weight: 700; }
+	.hero-main { flex: 1; margin-left: 15px; }
+	.name-row { flex-direction: row; align-items: center; }
+	.name { font-size: 21px; font-weight: 700; }
+	.tag { margin-left: 8px; padding: 2px 7px; border-radius: 6px; color: #168e64; background-color: #d9f2e7; font-size: 10px; }
+	.summary, .contact { margin-top: 6px; color: #66746d; font-size: 12px; }
+	.edit, .add { color: #159669; font-size: 13px; }
+	.stats-card { margin: 14px 16px; padding: 16px 0; flex-direction: row; border-radius: 14px; background-color: #fff; }
+	.stat { flex: 1; align-items: center; }
+	.stat-value { font-size: 19px; font-weight: 700; }
+	.stat-label { margin-top: 4px; color: #8a9099; font-size: 11px; }
+	.divider { width: 1px; height: 30px; background-color: #eef0f2; }
+	.section { margin: 14px 16px; padding: 18px; border-radius: 14px; background-color: #fff; }
+	.section-head, .experience-head, .attachment { flex-direction: row; align-items: center; justify-content: space-between; }
+	.section-title { font-size: 17px; font-weight: 700; }
+	.section-empty { margin-top: 15px; padding: 18px; align-items: center; border-radius: 10px; background-color: #f8f9fa; }
+	.section-empty-text { color: #9aa0a6; font-size: 12px; }
+	.experience { padding: 17px 0; border-bottom: 1px solid #f0f1f3; }
+	.experience-head { align-items: flex-start; }
+	.experience-title { font-size: 15px; font-weight: 600; }
+	.experience-sub { margin-top: 5px; color: #596168; font-size: 13px; }
+	.more { padding: 0 4px 8px 14px; color: #92989e; letter-spacing: 2px; }
+	.date { margin-top: 7px; color: #9aa0a6; font-size: 11px; }
+	.description { margin-top: 9px; color: #555d63; font-size: 13px; line-height: 20px; }
+	.attachment { min-height: 55px; }
+	.attachment-name { margin-top: 7px; color: #6e757b; font-size: 12px; }
+	.arrow { color: #b9bfc5; font-size: 24px; }
+	.safe-bottom { height: 28px; }
+</style>

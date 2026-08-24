@@ -1,0 +1,41 @@
+import { AUTH_REQUIRED_ROUTES, LOGIN_PATH } from '../config/routes.uts'
+import { isLoggedIn } from '../stores/auth.uts'
+
+let installed = false
+
+function requiresAuth(url : string) : boolean {
+	for (let i = 0; i < AUTH_REQUIRED_ROUTES.length; i++) {
+		if (url.indexOf(AUTH_REQUIRED_ROUTES[i]) == 0) return true
+	}
+	return false
+}
+
+function routeUrl(options : any | null) : string {
+	if (options == null) return ''
+	const optionsText = JSON.stringify(options)
+	if (optionsText == null || optionsText == '') return ''
+	const parsed = JSON.parse(optionsText)
+	if (parsed == null) return ''
+	const data = parsed as UTSJSONObject
+	const url = data['url'] as string | null
+	return url == null ? '' : url
+}
+
+function guard(options : any | null) : boolean {
+	const url = routeUrl(options)
+	if (requiresAuth(url) && !isLoggedIn()) {
+		uni.navigateTo({
+			url: `${LOGIN_PATH}?redirect=${encodeURIComponent(url)}`
+		})
+		return false
+	}
+	return true
+}
+
+export function installRouteMiddleware() {
+	if (installed) return
+	installed = true
+	uni.addInterceptor('navigateTo', { invoke: (options : any | null) : boolean => guard(options) })
+	uni.addInterceptor('redirectTo', { invoke: (options : any | null) : boolean => guard(options) })
+	uni.addInterceptor('reLaunch', { invoke: (options : any | null) : boolean => guard(options) })
+}

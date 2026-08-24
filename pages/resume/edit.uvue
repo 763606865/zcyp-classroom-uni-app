@@ -1,0 +1,201 @@
+<template>
+	<scroll-view class="page" scroll-y>
+		<view class="form-card">
+			<text class="section-title">基本信息</text>
+			<view class="field"><text class="label">简历名称</text><input v-model="form.title" class="input" placeholder="例如：求职简历" /></view>
+			<view class="field"><text class="label">姓名 *</text><input v-model="form.full_name" class="input" placeholder="请输入真实姓名" /></view>
+			<view class="field"><text class="label">手机号 *</text><input v-model="form.phone" class="input" type="number" maxlength="20" placeholder="请输入手机号" /></view>
+			<view class="field"><text class="label">邮箱 *</text><input v-model="form.email" class="input" placeholder="请输入邮箱" /></view>
+			<view class="field">
+				<text class="label">性别</text>
+				<picker class="picker" :range="genderLabels" :value="form.gender" @change="onGenderChange">
+					<text>{{ genderLabels[form.gender] }}</text>
+				</picker>
+			</view>
+			<view class="field"><text class="label">出生日期</text><picker class="picker" mode="date" :value="form.birth_date" @change="onBirthChange"><text>{{ form.birth_date == '' ? '请选择' : form.birth_date }}</text></picker></view>
+			<view class="field">
+				<text class="label">当前状态</text>
+				<picker class="picker" :range="identityLabels" :value="form.current_identity" @change="onIdentityChange">
+					<text>{{ identityLabels[form.current_identity] }}</text>
+				</picker>
+			</view>
+		</view>
+
+		<view class="form-card">
+			<text class="section-title">求职概况</text>
+			<view class="field">
+				<text class="label">最高学历</text>
+				<picker class="picker" :range="educationLabels" :value="form.highest_education_level" @change="onEducationChange">
+					<text>{{ educationLabels[form.highest_education_level] }}</text>
+				</picker>
+			</view>
+			<view class="field"><text class="label">工作年限</text><input v-model="form.work_years_text" class="input" type="number" placeholder="请输入年数，应届生填0" /></view>
+			<view class="field"><text class="label">期望月薪下限</text><input v-model="form.salary_min_text" class="input" type="digit" placeholder="元/月" /></view>
+			<view class="field"><text class="label">期望月薪上限</text><input v-model="form.salary_max_text" class="input" type="digit" placeholder="元/月" /></view>
+			<view class="field switch-field">
+				<text class="label">设为主简历</text>
+				<switch color="#19a974" :checked="form.is_primary == 1" @change="onPrimaryChange" />
+			</view>
+		</view>
+
+		<button class="save-button" :loading="saving" :disabled="saving" @click="save">保存简历</button>
+		<view class="safe-bottom"></view>
+	</scroll-view>
+</template>
+
+<script setup lang="uts">
+	import { createResume, getResume, updateResume } from '../../api/resume.uts'
+	import { getUser } from '../../stores/auth.uts'
+
+	const genderLabels : string[] = ['未知', '男', '女']
+	const identityLabels : string[] = ['其他', '职场人', '学生', '待业']
+	const educationLabels : string[] = ['请选择', '高中/中专', '专科', '本科', '硕士', '博士', '其他']
+	type ResumeForm = {
+		title : string
+		full_name : string
+		phone : string
+		email : string
+		gender : number
+		birth_date : string
+		current_identity : number
+		highest_education_level : number
+		work_years_text : string
+		salary_min_text : string
+		salary_max_text : string
+		is_primary : number
+	}
+	const resumeId = ref(0)
+	const saving = ref(false)
+	const form = reactive<ResumeForm>({
+		title: '求职简历',
+		full_name: '',
+		phone: '',
+		email: '',
+		gender: 0,
+		birth_date: '',
+		current_identity: 0,
+		highest_education_level: 0,
+		work_years_text: '',
+		salary_min_text: '',
+		salary_max_text: '',
+		is_primary: 0
+	})
+
+	function hasText(value : string | null) : boolean {
+		return value != null && value != ''
+	}
+
+	function showError(message : string) {
+		uni.showToast({ title: message, icon: 'none' })
+	}
+
+	function errorMessage(error : any | null, fallback : string) : string {
+		return fallback
+	}
+
+	function trimText(value : any | null) : string {
+		if (value == null) return ''
+		return (value as string).trim()
+	}
+
+	function loadDetail() {
+		uni.showLoading({ title: '加载中' })
+		getResume(resumeId.value).then((item) => {
+			form.title = item.title == '' ? '求职简历' : item.title
+			form.full_name = item.full_name
+			form.phone = item.phone
+			form.email = item.email
+			form.gender = item.gender
+			form.birth_date = hasText(item.birth_date) ? item.birth_date! : ''
+			form.current_identity = item.current_identity
+			form.highest_education_level = item.highest_education_level == null ? 0 : item.highest_education_level!
+			form.work_years_text = item.work_years == null ? '' : `${item.work_years}`
+			form.salary_min_text = item.expected_salary_min == null ? '' : `${item.expected_salary_min}`
+			form.salary_max_text = item.expected_salary_max == null ? '' : `${item.expected_salary_max}`
+			form.is_primary = item.is_primary
+			uni.hideLoading()
+		}).catch((error : any | null) => {
+			uni.showToast({ title: errorMessage(error, '简历加载失败'), icon: 'none' })
+			uni.hideLoading()
+		})
+	}
+
+	onLoad((options : UTSJSONObject) => {
+		const user = getUser()
+		if (user != null) {
+			if (hasText(user!.name)) {
+				form.full_name = user!.name!
+			} else {
+				form.full_name = hasText(user!.nickname) ? user!.nickname! : ''
+			}
+			form.phone = hasText(user!.phone) ? user!.phone! : ''
+			form.email = hasText(user!.email) ? user!.email! : ''
+		}
+		const idValue = options['id'] as string | null
+		if (idValue != null && idValue != '') {
+			resumeId.value = parseInt(idValue)
+			loadDetail()
+		}
+	})
+
+	function eventValue(event : UTSJSONObject) : any | null {
+		const detail = event['detail'] as UTSJSONObject | null
+		return detail == null ? null : detail!['value']
+	}
+
+	function onGenderChange(event : UTSJSONObject) { form.gender = parseInt(eventValue(event) as string) }
+	function onIdentityChange(event : UTSJSONObject) { form.current_identity = parseInt(eventValue(event) as string) }
+	function onEducationChange(event : UTSJSONObject) { form.highest_education_level = parseInt(eventValue(event) as string) }
+	function onBirthChange(event : UTSJSONObject) { form.birth_date = eventValue(event) as string }
+	function onPrimaryChange(event : UTSJSONObject) { form.is_primary = eventValue(event) == true ? 1 : 0 }
+
+	function save() {
+		const fullName = trimText(form.full_name)
+		const phone = trimText(form.phone)
+		const email = trimText(form.email).toLowerCase()
+		if (fullName == '') return showError('请填写姓名')
+		if (phone == '') return showError('请填写手机号')
+		if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return showError('请填写正确的邮箱')
+
+		const title = trimText(form.title)
+		const payload = {
+			title: title == '' ? '求职简历' : title,
+			full_name: fullName,
+			phone: phone,
+			email: email,
+			gender: form.gender,
+			birth_date: form.birth_date == '' ? null : form.birth_date,
+			current_identity: form.current_identity,
+			highest_education_level: form.highest_education_level == 0 ? null : form.highest_education_level,
+			work_years: form.work_years_text == '' ? null : parseInt(form.work_years_text),
+			expected_salary_min: form.salary_min_text == '' ? null : parseFloat(form.salary_min_text),
+			expected_salary_max: form.salary_max_text == '' ? null : parseFloat(form.salary_max_text),
+			expected_salary_unit: 1,
+			is_primary: form.is_primary
+		} as UTSJSONObject
+		saving.value = true
+		const task = resumeId.value > 0 ? updateResume(resumeId.value, payload) : createResume(payload)
+		task.then((item) => {
+			uni.showToast({ title: '保存成功', icon: 'success' })
+			setTimeout(() => {
+				uni.redirectTo({ url: `/pages/resume/detail?id=${item.id}` })
+			}, 300)
+			saving.value = false
+		}).catch((error : any | null) => {
+			showError(errorMessage(error, '简历保存失败'))
+			saving.value = false
+		})
+	}
+</script>
+
+<style scoped>
+	.page { flex: 1; background-color: #f6f7f9; }
+	.form-card { margin: 14px 16px; padding: 18px; border-radius: 14px; background-color: #fff; }
+	.section-title { margin-bottom: 8px; font-size: 17px; font-weight: 700; }
+	.field { min-height: 55px; flex-direction: row; align-items: center; border-bottom: 1px solid #f0f1f3; }
+	.label { width: 112px; color: #4e555b; font-size: 14px; }
+	.input, .picker { flex: 1; text-align: right; font-size: 14px; color: #22282d; }
+	.switch-field { justify-content: space-between; }
+	.save-button { margin: 22px 16px 0; height: 48px; line-height: 48px; border-radius: 12px; color: #fff; background-color: #19a974; font-size: 16px; font-weight: 600; }
+	.safe-bottom { height: 28px; }
+</style>

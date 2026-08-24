@@ -1,0 +1,26 @@
+export type MetaTreeItem = {
+	id : number
+	name : string
+	code : string
+	level ?: number
+	children : MetaTreeItem[]
+}
+
+export type MetaOption = {
+	value : any
+	label : string
+}
+
+export type RcMeta = {
+	areas : MetaTreeItem[]
+	industries : MetaTreeItem[]
+	positions : MetaTreeItem[]
+	majors : any[]
+	major_levels : MetaOption[]
+	major_education_types : MetaOption[]
+	company_scales : MetaOption[]
+	company_natures : MetaOption[]
+	company_funding_stages : MetaOption[]
+	company_benefit_tags : MetaOption[]
+	schools : MetaOption[]
+}

@@ -1,0 +1,53 @@
+import { request } from '../services/http.uts'
+import type { ImConversation } from '../types/im.uts'
+
+function textFromAny(value : any | null, fallback : string) : string {
+	if (value == null) return fallback
+	if (typeof value != 'string') return fallback
+	const text = value as string
+	return text == '' ? fallback : text
+}
+
+function parseImConversation(data : any | null) : ImConversation {
+	const conversation = JSON.parse<ImConversation>(JSON.stringify(data))
+	if (conversation == null) {
+		throw new Error('会话响应解析失败')
+	}
+	return conversation!
+}
+
+function parseImConversations(data : any | null) : ImConversation[] {
+	const conversations = JSON.parse<ImConversation[]>(JSON.stringify(data))
+	return conversations == null ? [] : conversations!
+}
+
+export function getImConversations() : Promise<ImConversation[]> {
+	return request<UTSJSONObject>('/rc/im/conversations', 'GET', { per_page: 100 }).then((data : UTSJSONObject) : ImConversation[] => {
+		return parseImConversations(data['data'])
+	})
+}
+
+export function getImMessages(conversationId : number, cursor : string = '') : Promise<UTSJSONObject> {
+	const query = cursor == '' ? { limit: 30 } : { limit: 30, cursor: cursor }
+	return request<UTSJSONObject>(`/rc/im/conversations/${conversationId}/messages`, 'GET', query)
+}
+
+export function refreshImToken() : Promise<string> {
+	return request<any>('/rc/im/refresh-token').then((data : any) : string => {
+		if (typeof data == 'string') return data as string
+		const body = data as UTSJSONObject
+		const token = textFromAny(body['token'], '')
+		if (token != '') return token
+		const accessToken = textFromAny(body['access_token'], '')
+		return accessToken != '' ? accessToken : textFromAny(body['im_token'], '')
+	})
+}
+
+export function createImConversation(externalUserId : string) : Promise<ImConversation> {
+	return request<UTSJSONObject>('/rc/im/conversations', 'POST', {
+		type: 'single',
+		members: [{ external_user_id: externalUserId }]
+	}).then((data : UTSJSONObject) : ImConversation => {
+		return parseImConversation(data)
+	})
+}
