@@ -1,9 +1,9 @@
 {
-	"name": "zcyp-uni-app",
+	"name": "中测培训",
 	"appid": "__UNI__0AA0898",
-	"description": "",
+	"description": "中测高科旗下，在线培训/课堂项目",
 	"versionName": "1.0.0",
-	"versionCode": "100",
+	"versionCode": "100000",
 	"uni-app-x": {
 		"styleIsolationVersion": "2",
 		"vapor": true,
@@ -78,10 +78,10 @@
 				}
 			},
 			"icons": {
-				"hdpi": "static/logo-72_72.png",
-				"xhdpi": "/Users/zn/Downloads/图标icon/logo-96_96.png",
-				"xxhdpi": "/Users/zn/Downloads/图标icon/logo-144_144.png",
-				"xxxhdpi": "/Users/zn/Downloads/图标icon/logo-192_192.png"
+				"hdpi": "static/72_72.png",
+				"xhdpi": "static/96_96.png",
+				"xxhdpi": "static/144_144.png",
+				"xxxhdpi": "static/192_192.png"
 			},
 			"splashScreens": {
 				"default": {}
@@ -97,7 +97,7 @@
 				"NSLocationWhenInUseUsageDescription": "用于展示附近的职位/牛人信息"
 			},
 			"icons": {
-				"appstore": "static/logo-1024_1024.png"
+				"appstore": "/Users/zn/Downloads/favicon_io/android-chrome-512x512.png"
 			},
 			"splashScreens": {}
 		}
@@ -105,6 +105,9 @@
 	"web": {
 		"router": {
 			"mode": ""
+		},
+		"sdkConfigs": {
+			"maps": {}
 		}
 	}
 }
