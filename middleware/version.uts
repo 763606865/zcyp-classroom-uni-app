@@ -1,4 +1,5 @@
 import { API_BASE_URL, VERSION_CHECK_PATH } from '../config/env.uts'
+import { getClientHeaders } from '../services/http.uts'
 
 function textFromAny(value : any | null, fallback : string) : string {
 	if (value == null) return fallback
@@ -9,28 +10,32 @@ function textFromAny(value : any | null, fallback : string) : string {
 export function checkAppVersion() {
 	if (VERSION_CHECK_PATH == '' || VERSION_CHECK_PATH.indexOf('/') != 0) return
 
-	const appInfo = uni.getAppBaseInfo()
-	const deviceInfo = uni.getDeviceInfo()
 	uni.request({
 		url: `${API_BASE_URL}${VERSION_CHECK_PATH}`,
 		method: 'GET',
-		data: {
-			platform: deviceInfo.platform,
-			version: appInfo.appVersion
-		},
+		header: getClientHeaders(),
 		success: (response) => {
 			const body = response.data as UTSJSONObject
 			const payload = body['data'] as UTSJSONObject | null
-			if (payload != null && payload!['force_update'] == true) {
+			if (payload != null && payload!['has_update'] == true) {
+				const latest = payload!['latest_version'] as UTSJSONObject | null
+				if (latest == null) return
+				const forced = payload!['force_update'] == true || payload!['update_type'] == 'force'
 				uni.showModal({
 					title: '发现新版本',
-					content: textFromAny(payload!['message'], '当前版本需要更新后继续使用'),
-					showCancel: false,
+					content: textFromAny(latest!['release_notes'], forced ? '当前版本需要更新后继续使用' : '新版本已发布，建议立即更新'),
+					showCancel: !forced,
 					confirmText: '立即更新',
-					success: () => {
-						const downloadUrl = textFromAny(payload!['download_url'], '')
+					success: (result) => {
+						if (!result.confirm) return
+						const downloadUrl = textFromAny(latest!['download_url'], '')
 						if (downloadUrl != '') {
+							// #ifdef APP
+							plus.runtime.openURL(downloadUrl)
+							// #endif
+							// #ifndef APP
 							uni.setClipboardData({ data: downloadUrl })
+							// #endif
 						}
 					}
 				})

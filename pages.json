@@ -7,94 +7,41 @@
       }
     },
     {
-      "path": "pages/jobs/index",
+      "path": "pages/study/index",
       "style": {
-        "navigationBarTitleText": "职位"
-      }
-    },
-    {
-      "path": "pages/discover/index",
-      "style": {
-        "navigationBarTitleText": "发现职位"
-      }
-    },
-    {
-      "path": "pages/talents/index",
-      "style": {
-        "navigationBarTitleText": "牛人"
-      }
-    },
-    {
-      "path": "pages/search/index",
-      "style": {
-        "navigationBarTitleText": "搜索牛人"
-      }
-    },
-    {
-      "path": "pages/messages/index",
-      "style": {
-        "navigationBarTitleText": "消息"
+        "navigationStyle": "custom"
       }
     },
     {
       "path": "pages/profile/index",
-      "style": {
-        "navigationBarTitleText": "我的"
-      }
+      "style": { "navigationStyle": "custom" }
+    },
+    {
+      "path": "pages/profile/detail",
+      "style": { "navigationStyle": "custom" }
+    },
+    {
+      "path": "pages/study/detail",
+      "style": { "navigationStyle": "custom" }
+    },
+    {
+      "path": "pages/study/live",
+      "style": { "navigationStyle": "custom" }
+    },
+    {
+      "path": "pages/study/video",
+      "style": { "navigationStyle": "custom" }
     },
     {
       "path": "pages/auth/login",
       "style": {
-        "navigationBarTitleText": "登录注册"
-      }
-    },
-    {
-      "path": "pages/auth/wechat",
-      "style": {
-        "navigationBarTitleText": "微信登录"
-      }
-    },
-    {
-      "path": "pages/auth/bind-phone",
-      "style": {
-        "navigationBarTitleText": "绑定手机号"
-      }
-    },
-
-    {
-      "path": "pages/resume/index",
-      "style": {
-        "navigationBarTitleText": "我的简历"
-      }
-    },
-    {
-      "path": "pages/resume/detail",
-      "style": {
-        "navigationBarTitleText": "简历详情"
-      }
-    },
-    {
-      "path": "pages/resume/edit",
-      "style": {
-        "navigationBarTitleText": "编辑简历"
-      }
-    },
-    {
-      "path": "pages/resume/experience",
-      "style": {
-        "navigationBarTitleText": "经历信息"
-      }
-    },
-    {
-      "path": "pages/messages/chat/index",
-      "style": {
-        "navigationBarTitleText": "聊天"
+        "navigationStyle": "custom"
       }
     }
   ],
   "globalStyle": {
     "navigationBarTextStyle": "black",
-    "navigationBarTitleText": "中测易招",
+    "navigationBarTitleText": "中测培训",
     "navigationBarBackgroundColor": "#FFFFFF",
     "backgroundColor": "#F6F7F9"
   },

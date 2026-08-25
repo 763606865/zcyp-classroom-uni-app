@@ -52,7 +52,7 @@
 
 	.rc-page {
 		flex: 1;
-		background-color: #f6f7f9;
+		background-color: #F5F7FA;
 		padding-bottom: 76px;
 	}
 </style>

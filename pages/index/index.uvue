@@ -1,25 +1,38 @@
 <template>
-	<view class="launch">
-		<view class="brand"><text class="brand-text">Rc</text></view>
-		<text class="name">中测易招</text>
-		<text class="slogan">让人才与机会更快相遇</text>
-	</view>
+	<RcNavBar title="首页" />
+	<scroll-view class="page" scroll-y refresher-enabled :refresher-triggered="refreshing" @refresherrefresh="refresh">
+		<view class="hero"><text class="eyebrow">中测培训课堂</text><text class="hero-title">持续学习，成为更好的自己</text><text class="hero-copy">权威课程 · 专业培训 · 随时学习</text></view>
+		<swiper v-if="home.banners.length > 0" class="banner" circular autoplay indicator-dots>
+			<swiper-item v-for="item in home.banners" :key="item.id"><view class="banner-item"><image v-if="item.cover != null" class="banner-image" :src="item.cover!" mode="aspectFill" /><view class="banner-shade"><text class="banner-title">{{ item.title }}</text><text class="banner-subtitle">{{ item.subtitle == null ? item.summary : item.subtitle }}</text></view></view></swiper-item>
+		</swiper>
+		<view class="quick-card">
+			<view class="quick-item" @click="goStudy"><text class="quick-icon">▷</text><text class="quick-title">继续学习</text></view>
+			<view class="quick-item" @click="showSoon('培训报名')"><text class="quick-icon">◇</text><text class="quick-title">培训报名</text></view>
+			<view class="quick-item" @click="showSoon('证书查询')"><text class="quick-icon">✓</text><text class="quick-title">证书查询</text></view>
+			<view class="quick-item" @click="goProfile"><text class="quick-icon">○</text><text class="quick-title">个人中心</text></view>
+		</view>
+		<view v-if="loading" class="state"><text>正在加载课堂内容...</text></view>
+		<view v-else-if="errorText != ''" class="state"><text>{{ errorText }}</text><text class="retry" @click="load">重新加载</text></view>
+		<view v-else>
+			<view v-if="home.featured_trainings.length > 0" class="section"><view class="section-head"><text class="section-title">推荐培训</text><text class="section-more">精选专题</text></view><scroll-view scroll-x class="horizontal"><view class="card-row"><view v-for="item in home.featured_trainings" :key="item.id" class="training-card"><image v-if="item.cover != null" class="training-cover" :src="item.cover!" mode="aspectFill" /><view class="training-body"><text class="card-title">{{ item.title }}</text><text class="card-meta">{{ item.location == null ? '线上培训' : item.location }}</text><text class="price">{{ item.is_free ? '免费' : '¥' + item.price }}</text></view></view></view></scroll-view></view>
+			<view v-if="home.featured_courses.length > 0" class="section"><view class="section-head"><text class="section-title">精品课程</text><text class="section-more" @click="goStudy">查看全部 ›</text></view><view v-for="item in home.featured_courses" :key="item.id" class="course-row"><image v-if="item.cover != null" class="course-cover" :src="item.cover!" mode="aspectFill" /><view v-else class="course-cover placeholder"><text>课</text></view><view class="course-body"><text class="card-title">{{ item.title }}</text><text class="card-meta">{{ item.lesson_count }} 课时 · {{ item.duration_minutes }} 分钟</text><text class="teacher">{{ item.teacher == null ? '专业讲师' : item.teacher!.name }}</text></view></view></view>
+		</view><view class="bottom-space" />
+	</scroll-view><RcTabBar current-path="/pages/index/index" />
 </template>
-
 <script setup lang="uts">
-	import { JOBS_PATH } from '../../config/routes.uts'
-
-	onMounted(() => {
-		setTimeout(() => {
-			uni.reLaunch({ url: JOBS_PATH })
-		}, 500)
-	})
+	import RcTabBar from '../../components/RcTabBar.uvue'
+	import RcNavBar from '../../components/RcNavBar.uvue'
+	import { getClassroomHome } from '../../api/classroom.uts'
+	import type { ClassroomHome } from '../../types/classroom.uts'
+	const home = reactive<ClassroomHome>({ banners: [], featured_trainings: [], latest_trainings: [], featured_courses: [] })
+	const loading = ref(true); const refreshing = ref(false); const errorText = ref('')
+	onMounted(() => load())
+	function load() { loading.value = true; errorText.value = ''; getClassroomHome().then((data) => { home.banners = data.banners; home.featured_trainings = data.featured_trainings.length > 0 ? data.featured_trainings : data.latest_trainings; home.latest_trainings = data.latest_trainings; home.featured_courses = data.featured_courses; loading.value = false; refreshing.value = false }).catch(() => { errorText.value = '课堂内容加载失败，请检查网络后重试'; loading.value = false; refreshing.value = false }) }
+	function refresh() { refreshing.value = true; load() }
+	function goStudy() { uni.redirectTo({ url: '/pages/study/index' }) }
+	function goProfile() { uni.redirectTo({ url: '/pages/profile/index' }) }
+	function showSoon(name : string) { uni.showToast({ title: `${name}即将开放`, icon: 'none' }) }
 </script>
-
 <style scoped>
-	.launch { flex: 1; align-items: center; justify-content: center; background-color: #f3fbf7; }
-	.brand { width: 72px; height: 72px; border-radius: 22px; align-items: center; justify-content: center; background-color: #19a974; }
-	.brand-text { color: #ffffff; font-size: 30px; font-weight: 700; }
-	.name { margin-top: 18px; font-size: 24px; font-weight: 700; color: #17221e; }
-	.slogan { margin-top: 8px; font-size: 14px; color: #718078; }
+	.page{flex:1;background:#F5F7FA}.hero{padding:52px 22px 24px;background:#0F62FE}.eyebrow{color:#fff;font-size:12px;letter-spacing:2px}.hero-title{margin-top:10px;color:#fff;font-size:25px;font-weight:700}.hero-copy{margin-top:8px;color:#fff;font-size:13px}.banner{height:174px;margin:16px;border-radius:18px;overflow:hidden}.banner-item,.banner-image{width:100%;height:174px}.banner-item{background:#0F62FE}.banner-shade{position:absolute;left:0;right:0;bottom:0;padding:30px 18px 18px;background:rgba(15,98,254,.72)}.banner-title{color:#fff;font-size:19px;font-weight:700}.banner-subtitle{margin-top:5px;color:#fff;font-size:12px}.quick-card{margin:16px;padding:17px 8px;border-radius:16px;background:#fff;flex-direction:row}.quick-item{flex:1;align-items:center}.quick-icon{width:38px;height:38px;line-height:38px;text-align:center;border-radius:12px;color:#0F62FE;background:#E8F0FE;font-size:19px}.quick-title{margin-top:8px;color:#30423c;font-size:12px}.section{margin-bottom:22px}.section-head{padding:0 18px 12px;flex-direction:row;align-items:center;justify-content:space-between}.section-title{color:#172d26;font-size:19px;font-weight:700}.section-more{color:#0F62FE;font-size:12px}.horizontal{width:100%}.card-row{padding:0 16px;flex-direction:row}.training-card{width:220px;margin-right:12px;border-radius:15px;overflow:hidden;background:#fff}.training-cover{width:220px;height:116px;background:#E8F0FE}.training-body{padding:12px}.card-title{color:#1d2e28;font-size:15px;font-weight:600}.card-meta,.teacher{margin-top:7px;color:#7b8984;font-size:11px}.price{margin-top:9px;color:#FFA500;font-size:14px;font-weight:700}.course-row{margin:0 16px 12px;padding:12px;border-radius:14px;background:#fff;flex-direction:row}.course-cover{width:104px;height:76px;border-radius:10px;background:#E8F0FE}.placeholder{align-items:center;justify-content:center;color:#0F62FE}.course-body{flex:1;margin-left:13px;justify-content:center}.state{padding:42px 20px;align-items:center;color:#829089;font-size:13px}.retry{margin-top:12px;color:#0F62FE}.bottom-space{height:88px}
 </style>

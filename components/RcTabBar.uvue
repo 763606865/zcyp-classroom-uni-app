@@ -4,6 +4,10 @@
 			v-for="item in items"
 			:key="item.path"
 			class="tab-item"
+			:class="{ pressed: pressedPath == item.path }"
+			@touchstart="press(item.path)"
+			@touchend="release"
+			@touchcancel="release"
 			@click="go(item.path)"
 		>
 			<text class="tab-icon" :class="{ active: currentPath == item.path }">{{ item.icon }}</text>
@@ -13,8 +17,6 @@
 </template>
 
 <script setup lang="uts">
-	import { isRecruiter } from '../stores/auth.uts'
-
 	type TabItem = {
 		label : string
 		icon : string
@@ -28,22 +30,15 @@
 		}
 	})
 
-	const jobseekerItems : TabItem[] = [
-		{ label: '职位', icon: '⌕', path: '/pages/jobs/index' },
-		{ label: '发现', icon: '◇', path: '/pages/discover/index' },
-		{ label: '消息', icon: '○', path: '/pages/messages/index' },
-		{ label: '我的', icon: '□', path: '/pages/profile/index' }
+	const items : TabItem[] = [
+		{ label: '首页', icon: '⌂', path: '/pages/index/index' },
+		{ label: '学习', icon: '▷', path: '/pages/study/index' },
+		{ label: '我的', icon: '○', path: '/pages/profile/index' }
 	]
-
-	const recruiterItems : TabItem[] = [
-		{ label: '牛人', icon: '♙', path: '/pages/talents/index' },
-		{ label: '搜索', icon: '⌕', path: '/pages/search/index' },
-		{ label: '消息', icon: '○', path: '/pages/messages/index' },
-		{ label: '我的', icon: '□', path: '/pages/profile/index' }
-	]
-
-	const items : TabItem[] = isRecruiter() ? recruiterItems : jobseekerItems
+	const pressedPath = ref('')
 	let navigating = false
+	function press(path : string) { pressedPath.value = path }
+	function release() { pressedPath.value = '' }
 
 	function go(path : string) {
 		if (path == props.currentPath) return
@@ -65,7 +60,8 @@
 		left: 0;
 		right: 0;
 		bottom: 0;
-		height: 64px;
+		height: 58px;
+		padding-bottom: env(safe-area-inset-bottom);
 		background-color: #ffffff;
 		border-top: 1px solid #eef0f3;
 		flex-direction: row;
@@ -76,10 +72,17 @@
 		flex: 1;
 		align-items: center;
 		justify-content: center;
+		transition-property: transform, opacity;
+		transition-duration: 120ms;
+	}
+
+	.pressed, .tab-item:active {
+		transform: scale(0.9);
+		opacity: 0.68;
 	}
 
 	.tab-icon {
-		font-size: 21px;
+		font-size: 22px;
 		color: #8a9099;
 		line-height: 24px;
 	}
@@ -91,7 +94,7 @@
 	}
 
 	.active {
-		color: #19a974;
+		color: #0F62FE;
 		font-weight: 600;
 	}
 </style>

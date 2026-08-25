@@ -1,0 +1,33 @@
+<template>
+	<view class="page"><RcNavBar title="直播课堂" :show-back="true" />
+		<view v-if="loading" class="state"><text>正在进入直播课堂...</text></view>
+		<view v-else-if="detail == null" class="state"><text>直播场次加载失败</text><button class="retry" @click="load">重新加载</button></view>
+		<view v-else class="content">
+			<view class="player"><video v-if="playUrl != ''" class="video" :src="playUrl" autoplay controls /><view v-else class="waiting"><text class="waiting-icon">◉</text><text class="waiting-title">{{ statusText(detail!.session.status) }}</text><text class="waiting-copy">{{ timeRange }}</text></view></view>
+			<view class="info"><view class="live-line"><text class="badge" :class="{ living: detail!.session.status == 'living' }">{{ statusText(detail!.session.status) }}</text><text v-if="detail!.session.status == 'living'" class="online">{{ detail!.session.online_count }} 人在线</text></view><text class="title">{{ detail!.session.title }}</text><text class="time">{{ timeRange }}</text><text v-if="detail!.play_urls != null && detail!.play_urls!.expires_at != null" class="expire">播放地址有效期至 {{ detail!.play_urls!.expires_at }}</text></view>
+			<view class="notice"><text class="notice-title">观看提示</text><text class="notice-text">进入直播后系统会自动记录有效观看时长，请保持网络稳定。直播结束后，回放生成可能需要一些时间。</text></view>
+		</view>
+	</view>
+</template>
+
+<script setup lang="uts">
+	import { getLiveSession, sendLiveHeartbeat } from '../../api/classroom.uts'
+	import RcNavBar from '../../components/RcNavBar.uvue'
+	import type { LiveSessionDetail } from '../../types/classroom.uts'
+	const sessionId = ref(0); const detail = ref<LiveSessionDetail | null>(null); const loading = ref(true); const playUrl = ref('')
+	let heartbeatTimer : number | null = null
+	let deviceId = ''
+	const timeRange = computed(() : string => { if (detail.value == null) return ''; const start = detail.value!.session.scheduled_start_at; const end = detail.value!.session.scheduled_end_at; return `${start == null ? '时间待定' : start}${end == null ? '' : ' 至 ' + end}` })
+	onLoad((options : UTSJSONObject) => { const value = options['id'] as string | null; sessionId.value = value == null ? 0 : parseInt(value); const stored = uni.getStorageSync('classroom_device_id'); deviceId = stored == null ? '' : stored as string; load() })
+	onUnload(() => stopHeartbeat())
+	function load() { if (sessionId.value <= 0) { loading.value = false; return }; loading.value = true; getLiveSession(sessionId.value).then((data) => { detail.value = data; selectPlayUrl(data); loading.value = false; if (data.session.status == 'living') startHeartbeat() }).catch(() => { detail.value = null; loading.value = false }) }
+	function selectPlayUrl(data : LiveSessionDetail) { playUrl.value = ''; if (data.session.status == 'living' && data.play_urls != null) { if (data.play_urls!.hls != null) playUrl.value = data.play_urls!.hls!; else if (data.play_urls!.flv != null) playUrl.value = data.play_urls!.flv!; return }; if (data.session.status == 'playback' && data.playback != null && data.playback!.url != null) playUrl.value = data.playback!.url! }
+	function startHeartbeat() { if (heartbeatTimer != null) return; sendLiveHeartbeat(sessionId.value, 'join', deviceId).catch(() => {}); heartbeatTimer = setInterval(() => { sendLiveHeartbeat(sessionId.value, 'heartbeat', deviceId).catch(() => {}) }, 45000) }
+	function stopHeartbeat() { if (heartbeatTimer == null) return; clearInterval(heartbeatTimer!); heartbeatTimer = null; sendLiveHeartbeat(sessionId.value, 'leave', deviceId).catch(() => {}) }
+	function statusText(value : string) : string { if (value == 'living') return '直播中'; if (value == 'ended') return '已结束'; if (value == 'recording') return '回放生成中'; if (value == 'playback') return '观看回放'; if (value == 'cancelled') return '已取消'; return '未开始' }
+</script>
+
+<style scoped>
+	.page{flex:1;background:#f4f7f5}.state{flex:1;align-items:center;justify-content:center;color:#85918c}.retry{margin-top:18px;width:140px;height:42px;line-height:42px;border-radius:21px;background:#176b52;color:#fff;font-size:13px}.content{flex:1}.player{width:100%;height:230px;background:#102b24}.video{width:100%;height:230px}.waiting{flex:1;align-items:center;justify-content:center}.waiting-icon{color:#74b69e;font-size:34px}.waiting-title{margin-top:12px;color:#fff;font-size:18px;font-weight:600}.waiting-copy{margin-top:8px;color:#a9c2b9;font-size:11px}.info{margin:14px 16px;padding:18px;border-radius:15px;background:#fff}.live-line{flex-direction:row;align-items:center}.badge{padding:4px 9px;border-radius:10px;background:#e9eeec;color:#74817c;font-size:10px}.living{background:#e6f4ee;color:#16805d}.online{margin-left:9px;color:#84908b;font-size:10px}.title{margin-top:14px;color:#263b33;font-size:20px;font-weight:700}.time{margin-top:9px;color:#7d8b85;font-size:12px}.expire{margin-top:8px;color:#a0aaa6;font-size:9px}.notice{margin:0 16px;padding:17px;border-radius:15px;background:#e8f2ee}.notice-title{color:#285444;font-size:14px;font-weight:700}.notice-text{margin-top:8px;color:#61766e;font-size:12px;line-height:19px}
+	.page{background:#F5F7FA}.retry{background:#0F62FE}.player{background:#0F62FE}.waiting-icon{color:#fff}.waiting-copy{color:#fff}.living{background:#E8F0FE;color:#0F62FE}.notice{background:#E8F0FE}.notice-title{color:#0F62FE}
+</style>

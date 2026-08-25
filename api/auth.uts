@@ -1,123 +1,42 @@
 import { request } from '../services/http.uts'
-import type { AuthUser, LoginResult, WechatAppLoginResult } from '../types/auth.uts'
+import type { AuthUser, LoginResult, SmsCodeResult, UpdateProfilePayload, UpdateUserResult } from '../types/auth.uts'
 
 function parseLoginResult(data : any | null) : LoginResult {
 	const result = JSON.parse<LoginResult>(JSON.stringify(data))
-	if (result == null) {
-		throw new Error('登录响应解析失败')
-	}
-	if (result!.access_token == '') {
-		throw new Error('登录响应缺少 access_token')
-	}
+	if (result == null || result!.access_token == '') throw new Error('登录响应缺少 access_token')
 	return result!
 }
 
 function parseAuthUser(data : any | null) : AuthUser {
 	const user = JSON.parse<AuthUser>(JSON.stringify(data))
-	if (user == null) {
-		throw new Error('用户响应解析失败')
-	}
+	if (user == null) throw new Error('用户响应解析失败')
 	return user!
 }
 
-export function sendVerificationCode(type : string, account : string, scene : string = 'login') : Promise<any> {
-	return request<any>('/rc/auth/send-verification-code', 'POST', {
-		type: type,
-		account: account,
-		scene: scene
-	}, false)
+export function sendSmsCode(phone : string) : Promise<SmsCodeResult> {
+	return request<SmsCodeResult>('/api/auth/sms-code', 'POST', { phone: phone }, false)
 }
 
 export function phoneLogin(phone : string, code : string) : Promise<LoginResult> {
-	return request<UTSJSONObject>('/rc/auth/phone-login', 'POST', {
+	return request<UTSJSONObject>('/api/auth/login', 'POST', {
 		phone: phone,
-		code: code
-	}, false).then((data : UTSJSONObject) : LoginResult => {
-		return parseLoginResult(data)
-	})
-}
-
-export function emailLogin(email : string, code : string) : Promise<LoginResult> {
-	return request<UTSJSONObject>('/rc/auth/email-login', 'POST', {
-		email: email,
-		code: code
-	}, false).then((data : UTSJSONObject) : LoginResult => {
-		return parseLoginResult(data)
-	})
-}
-
-function parseWechatAppLoginResult(data : any | null) : WechatAppLoginResult {
-	const result = JSON.parse<WechatAppLoginResult>(JSON.stringify(data))
-	if (result == null) {
-		throw new Error('微信登录响应解析失败')
-	}
-	return result!
-}
-
-// 小程序端：一次性提交 wx.login 换到的登录 code、getPhoneNumber 按钮换到的手机号 code，
-// 以及可选的头像地址（chooseAvatar 拿到的临时文件需先自行上传得到 URL 再传入）与昵称
-// （type="nickname" 输入框的明文文本）。小程序侧手机号由微信直接验证，无需再走短信验证码。
-// 需要后端新增接口：POST /rc/auth/wechat-mini-login
-export function wechatMiniLogin(loginCode : string, phoneCode : string, nickname : string | null, avatarUrl : string | null) : Promise<LoginResult> {
-	return request<UTSJSONObject>('/rc/auth/wechat-mini-login', 'POST', {
-		code: loginCode,
-		phone_code: phoneCode,
-		nickname: nickname,
-		avatar: avatarUrl
-	}, false).then((data : UTSJSONObject) : LoginResult => {
-		return parseLoginResult(data)
-	})
-}
-
-// App 端：微信开放平台授权拿到的 code（uni.login({ provider: 'weixin', onlyAuthorize: true })）。
-// 微信 SDK 无法像小程序一样直接给出已验证手机号，若该微信身份尚未绑定手机号，后端应返回
-// status = 'need_phone' 及 pending_token，前端随后走 bindWechatPhone 补充验证手机号。
-// 需要后端新增接口：POST /rc/auth/wechat-app-login
-export function wechatAppLogin(code : string, nickname : string | null, avatarUrl : string | null) : Promise<WechatAppLoginResult> {
-	return request<UTSJSONObject>('/rc/auth/wechat-app-login', 'POST', {
 		code: code,
-		nickname: nickname,
-		avatar: avatarUrl
-	}, false).then((data : UTSJSONObject) : WechatAppLoginResult => {
-		return parseWechatAppLoginResult(data)
-	})
-}
-
-// App 端补充绑定手机号：携带 wechatAppLogin 返回的 pending_token，加上短信验证码（复用
-// sendVerificationCode(type='phone', account=phone, scene='bind')）完成绑定并换取正式登录态。
-// 需要后端新增接口：POST /rc/auth/wechat-bind-phone
-export function bindWechatPhone(pendingToken : string, phone : string, code : string) : Promise<LoginResult> {
-	return request<UTSJSONObject>('/rc/auth/wechat-bind-phone', 'POST', {
-		pending_token: pendingToken,
-		phone: phone,
-		code: code
-	}, false).then((data : UTSJSONObject) : LoginResult => {
-		return parseLoginResult(data)
-	})
+		device_name: '中测培训'
+	}, false).then((data : UTSJSONObject) : LoginResult => parseLoginResult(data))
 }
 
 export function getMe() : Promise<AuthUser> {
-	return request<UTSJSONObject>('/rc/auth/me', 'GET').then((data : UTSJSONObject) : AuthUser => {
-		return parseAuthUser(data['user'])
-	})
+	return request<UTSJSONObject>('/api/me', 'GET').then((data : UTSJSONObject) : AuthUser => parseAuthUser(data['user']))
 }
 
-export function refreshTokenByIdentityType(identityType : number) : Promise<LoginResult> {
-	return request<UTSJSONObject>('/rc/auth/refresh-token', 'POST', {
-		identity_type: identityType
-	}).then((data : UTSJSONObject) : LoginResult => {
-		return parseLoginResult(data)
-	})
+export function updateProfile(payload : UpdateProfilePayload) : Promise<UpdateUserResult> {
+	return request<UpdateUserResult>('/api/user', 'PATCH', payload)
 }
 
-export function refreshTokenByIdentityId(identityId : number) : Promise<LoginResult> {
-	return request<UTSJSONObject>('/rc/auth/refresh-token', 'POST', {
-		identity_id: identityId
-	}).then((data : UTSJSONObject) : LoginResult => {
-		return parseLoginResult(data)
-	})
+export function sendChangePhoneCode(phone : string) : Promise<SmsCodeResult> {
+	return request<SmsCodeResult>('/api/user/phone/sms-code', 'POST', { phone: phone })
 }
 
-export function logout() : Promise<any> {
-	return request<any>('/rc/auth/logout', 'POST', {})
+export function changePhone(phone : string, code : string) : Promise<UpdateUserResult> {
+	return request<UpdateUserResult>('/api/user/phone', 'PATCH', { phone: phone, code: code })
 }

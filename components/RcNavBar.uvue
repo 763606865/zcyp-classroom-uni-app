@@ -1,0 +1,44 @@
+<template>
+	<view class="nav-placeholder" :style="{ height: totalHeight + 'px' }" />
+	<view class="nav-fixed">
+		<view class="status-space" :style="{ height: statusHeight + 'px' }" />
+		<view class="nav-bar">
+			<view class="nav-side nav-left"><view v-if="showBack" class="nav-button" @click="back"><text class="back-icon">‹</text></view></view>
+			<text class="nav-title">{{ title }}</text>
+			<view class="nav-side nav-actions"><view v-if="showSearch || showScan" class="nav-button plus-button" :class="{ 'plus-open': menuOpen }" @click="toggleMenu"><text class="plus-icon">＋</text></view></view>
+		</view>
+		<view v-if="menuOpen" class="menu-panel" :style="{ top: menuTop + 'px' }">
+			<view class="menu-arrow" />
+			<view v-if="showScan" class="menu-item" @click="scan"><text class="menu-icon">▣</text><text class="menu-label">扫一扫</text></view>
+		</view>
+	</view>
+</template>
+
+<script setup lang="uts">
+	const props = defineProps({
+		title: { type: String, default: '中测培训' },
+		showBack: { type: Boolean, default: false },
+		showSearch: { type: Boolean, default: true },
+		showScan: { type: Boolean, default: true }
+	})
+	const statusHeight = ref(0)
+	const totalHeight = computed(() : number => statusHeight.value + 48)
+	const menuTop = computed(() : number => statusHeight.value + 44)
+	const menuOpen = ref(false)
+	onMounted(() => { const info = uni.getWindowInfo(); statusHeight.value = info.statusBarHeight == null ? 0 : info.statusBarHeight })
+	function back() { uni.navigateBack({ fail:() => uni.reLaunch({ url:'/pages/index/index' }) }) }
+	function toggleMenu() { menuOpen.value = !menuOpen.value }
+	function scan() {
+		menuOpen.value = false
+		// #ifdef APP || MP
+		uni.scanCode({ success:(result) => { if (result.result != '') uni.showToast({ title:'扫码成功', icon:'success' }) }, fail:() => {} })
+		// #endif
+		// #ifdef H5
+		uni.showToast({ title:'请在 App 或小程序中使用扫一扫', icon:'none' })
+		// #endif
+	}
+</script>
+
+<style scoped>
+	.nav-fixed{position:fixed;left:0;right:0;top:0;z-index:999;background:#fff;border-bottom:1px solid #edf0ee;overflow:visible}.status-space{width:100%}.nav-bar{height:48px;padding:0 10px;flex-direction:row;align-items:center;justify-content:space-between}.nav-title{position:absolute;left:80px;right:80px;text-align:center;color:#21352e;font-size:17px;font-weight:600}.nav-side{width:92px;height:48px;flex-direction:row;align-items:center}.nav-left{justify-content:flex-start}.nav-actions{justify-content:flex-end}.nav-button{width:40px;height:44px;align-items:center;justify-content:center}.back-icon{margin-top:-3px;color:#0F62FE;font-size:36px;font-weight:300}.plus-button{transition-property:transform;transition-duration:180ms}.plus-open{transform:rotate(45deg)}.plus-icon{color:#0F62FE;font-size:30px;font-weight:300}.menu-panel{position:absolute;right:10px;width:142px;padding:5px 0;border-radius:10px;background:#263238;box-shadow:0 6px 20px rgba(0,0,0,.22)}.menu-arrow{position:absolute;right:15px;top:-6px;width:12px;height:12px;background:#263238;transform:rotate(45deg)}.menu-item{height:48px;padding:0 16px;flex-direction:row;align-items:center}.menu-item:active{background:#37474F}.menu-icon{width:32px;color:#fff;font-size:20px}.menu-label{color:#fff;font-size:15px}
+</style>

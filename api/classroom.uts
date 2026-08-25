@@ -1,0 +1,52 @@
+import { request } from '../services/http.uts'
+import type { ClassroomHome, CourseComments, CourseInteractions, CoursePage, CourseProgressDetail, CourseProgressUpdate, LiveSessionDetail, VodPlayAuth } from '../types/classroom.uts'
+
+export function getClassroomHome() : Promise<ClassroomHome> {
+	return request<ClassroomHome>('/api/classroom/home', 'GET', null, false)
+}
+
+export function getCourseProgress(courseId : number) : Promise<CourseProgressDetail> {
+	return request<CourseProgressDetail>(`/api/me/courses/${courseId}/progress`)
+}
+
+export function getCourseInteractions(courseId : number) : Promise<CourseInteractions> {
+	return request<CourseInteractions>(`/api/classroom/courses/${courseId}/interactions`, 'GET', null, false)
+}
+
+export function setCourseFavorite(courseId : number, favorite : boolean) : Promise<CourseInteractions> {
+	return request<CourseInteractions>(`/api/me/courses/${courseId}/favorite`, favorite ? 'POST' : 'DELETE', {})
+}
+
+export function setCourseLike(courseId : number, liked : boolean) : Promise<CourseInteractions> {
+	return request<CourseInteractions>(`/api/me/courses/${courseId}/like`, liked ? 'POST' : 'DELETE', {})
+}
+
+export function getCourseComments(courseId : number) : Promise<CourseComments> {
+	return request<CourseComments>(`/api/classroom/courses/${courseId}/comments`, 'GET', { per_page: 20 }, false)
+}
+
+export function recordCourseShare(courseId : number, channel : string = 'link') : Promise<any> {
+	return request<any>(`/api/classroom/courses/${courseId}/share`, 'POST', { channel: channel, client: 'uni-app' }, false)
+}
+
+export function getLiveSession(sessionId : number) : Promise<LiveSessionDetail> {
+	return request<LiveSessionDetail>(`/api/live-sessions/${sessionId}`)
+}
+
+export function sendLiveHeartbeat(sessionId : number, action : string, deviceId : string) : Promise<any> {
+	return request<any>(`/api/live-sessions/${sessionId}/heartbeat`, 'POST', { action: action, device_id: deviceId })
+}
+
+export function getMyCourses(status : string = '') : Promise<CoursePage> {
+	const query = status == '' ? { per_page: 30 } : { status: status, per_page: 30 }
+	return request<CoursePage>('/api/me/courses', 'GET', query, true)
+}
+
+export function getLessonPlayAuth(courseId : number, lessonId : number) : Promise<VodPlayAuth> {
+	return request<VodPlayAuth>(`/api/me/courses/${courseId}/lessons/${lessonId}/play-auth`)
+}
+
+export function updateLessonProgress(courseId : number, lessonId : number, progressSeconds : number, completed : boolean = false) : Promise<CourseProgressUpdate> {
+	const payload = completed ? { progress_seconds: progressSeconds, completed: true } : { progress_seconds: progressSeconds }
+	return request<CourseProgressUpdate>(`/api/me/courses/${courseId}/lessons/${lessonId}/progress`, 'PUT', payload)
+}

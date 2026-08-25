@@ -1,0 +1,48 @@
+<template>
+	<view class="page">
+		<RcNavBar title="视频课程" :show-back="true" />
+		<view v-if="loading" class="state"><text>正在加载视频课时...</text></view>
+		<view v-else-if="lesson == null" class="state"><text>{{ errorText }}</text><button class="retry" @click="load">重新加载</button></view>
+		<scroll-view v-else class="content" scroll-y>
+			<view class="player">
+				<video v-if="playUrl != ''" id="lesson-video" class="video" :src="playUrl" controls autoplay @loadedmetadata="resumeVideo" @timeupdate="onTimeUpdate" @pause="onPause" @ended="onEnded" />
+				<view v-else-if="playAuth != null" class="cloud-player"><text class="cloud-icon">▶</text><text class="cloud-title">{{ providerName(playAuth!.provider) }}点播凭证已获取</text><text class="cloud-copy">视频采用云点播加密播放，需要对应播放器组件加载</text><text class="cloud-expire">凭证有效期 {{ playAuth!.expires_in }} 秒</text><button class="refresh-auth" @click="loadPlayAuth">刷新播放凭证</button></view>
+				<view v-else class="cloud-player"><text class="cloud-title">暂无可用播放地址</text><text class="cloud-copy">请稍后重试或联系课程管理员</text></view>
+			</view>
+
+			<view class="lesson-card"><text class="lesson-title">{{ lesson!.title }}</text><text v-if="lesson!.summary != null" class="lesson-summary">{{ lesson!.summary }}</text><view class="meta-row"><text>{{ providerLabel }}</text><text>{{ durationText(lesson!.duration_seconds) }}</text></view></view>
+
+			<view class="progress-card"><view class="progress-head"><text class="progress-title">学习进度</text><text class="progress-number">{{ progressPercent }}%</text></view><view class="progress-track"><view class="progress-value" :style="{ width: progressPercent + '%' }" /></view><view class="progress-detail"><text>已学习 {{ durationText(currentSeconds) }}</text><text>总时长 {{ durationText(lesson!.duration_seconds) }}</text></view><text class="progress-tip">播放中每隔约 15 秒自动保存，达到课程要求后自动完成。</text></view>
+			<view class="bottom-space" />
+		</scroll-view>
+	</view>
+</template>
+
+<script setup lang="uts">
+	import RcNavBar from '../../components/RcNavBar.uvue'
+	import { getCourseProgress, getLessonPlayAuth, updateLessonProgress } from '../../api/classroom.uts'
+	import type { CourseLesson, CourseProgressDetail, VodPlayAuth } from '../../types/classroom.uts'
+	const courseId = ref(0); const lessonId = ref(0); const lesson = ref<CourseLesson | null>(null); const playAuth = ref<VodPlayAuth | null>(null); const playUrl = ref(''); const loading = ref(true); const errorText = ref('视频课时加载失败')
+	const currentSeconds = ref(0); const progressPercent = ref(0)
+	let lastReportedSeconds = 0; let reporting = false; let completed = false
+	const providerLabel = computed(() : string => { if (lesson.value == null) return ''; if (lesson.value!.media_url != null && lesson.value!.media_url != '') return '视频直链'; return providerName(lesson.value!.media_provider == null ? '' : lesson.value!.media_provider!) + '点播' })
+
+	onLoad((options : UTSJSONObject) => { const courseValue = options['courseId'] as string | null; const lessonValue = options['lessonId'] as string | null; courseId.value = courseValue == null ? 0 : parseInt(courseValue); lessonId.value = lessonValue == null ? 0 : parseInt(lessonValue); load() })
+	onUnload(() => { if (!completed && currentSeconds.value > lastReportedSeconds) report(false) })
+
+	function load() { if (courseId.value <= 0 || lessonId.value <= 0) { loading.value = false; errorText.value = '课时参数无效'; return }; loading.value = true; getCourseProgress(courseId.value).then((data) => { const found = findLesson(data); if (found == null || found!.type != 'video') { lesson.value = null; errorText.value = '该课时不是视频课程'; loading.value = false; return }; lesson.value = found; currentSeconds.value = found!.progress.progress_seconds; lastReportedSeconds = currentSeconds.value; progressPercent.value = found!.progress.progress; completed = found!.progress.status == 'completed'; if (found!.media_url != null && found!.media_url != '') { playUrl.value = found!.media_url!; loading.value = false } else if (found!.media_id != null && found!.media_id != '') { loadPlayAuth() } else { loading.value = false } }).catch(() => { lesson.value = null; loading.value = false }) }
+	function findLesson(data : CourseProgressDetail) : CourseLesson | null { for (let i = 0; i < data.chapters.length; i++) { const rows = data.chapters[i].lessons; for (let j = 0; j < rows.length; j++) if (rows[j].id == lessonId.value) return rows[j] }; for (let i = 0; i < data.ungrouped_lessons.length; i++) if (data.ungrouped_lessons[i].id == lessonId.value) return data.ungrouped_lessons[i]; return null }
+	function loadPlayAuth() { getLessonPlayAuth(courseId.value, lessonId.value).then((data) => { playAuth.value = data; loading.value = false }).catch(() => { playAuth.value = null; loading.value = false; errorText.value = '播放凭证获取失败' }) }
+	function resumeVideo() { if (currentSeconds.value <= 0) return; const context = uni.createVideoContext('lesson-video'); context.seek(currentSeconds.value) }
+	function eventSeconds(event : UTSJSONObject) : number { const detail = event['detail'] as UTSJSONObject | null; if (detail == null) return currentSeconds.value; const value = detail!['currentTime'] as number | null; return value == null ? currentSeconds.value : Math.floor(value) }
+	function onTimeUpdate(event : UTSJSONObject) { currentSeconds.value = eventSeconds(event); if (lesson.value != null && lesson.value!.duration_seconds > 0) progressPercent.value = Math.min(100, Math.floor(currentSeconds.value * 100 / lesson.value!.duration_seconds)); if (currentSeconds.value - lastReportedSeconds >= 15) report(false) }
+	function onPause() { report(false) }
+	function onEnded() { completed = true; if (lesson.value != null && lesson.value!.duration_seconds > currentSeconds.value) currentSeconds.value = lesson.value!.duration_seconds; report(true) }
+	function report(markCompleted : boolean) { if (reporting || lesson.value == null || currentSeconds.value < 0) return; reporting = true; const seconds = currentSeconds.value; updateLessonProgress(courseId.value, lessonId.value, seconds, markCompleted).then((data) => { lastReportedSeconds = seconds; progressPercent.value = data.lesson_progress.progress; completed = data.lesson_progress.status == 'completed'; reporting = false }).catch(() => { reporting = false }) }
+	function durationText(seconds : number) : string { if (seconds <= 0) return '0分钟'; const minutes = Math.floor(seconds / 60); const rest = seconds % 60; return minutes > 0 ? `${minutes}分${rest}秒` : `${rest}秒` }
+	function providerName(value : string) : string { if (value == 'aliyun') return '阿里云'; if (value == 'tencent') return '腾讯云'; return '云端' }
+</script>
+
+<style scoped>
+	.page{flex:1;background:#F5F7FA}.state{flex:1;align-items:center;justify-content:center;color:#829089}.retry{margin-top:18px;width:140px;height:42px;line-height:42px;border-radius:21px;background:#0F62FE;color:#fff;font-size:13px}.content{flex:1}.player{width:100%;height:230px;background:#101820}.video{width:100%;height:230px}.cloud-player{height:230px;padding:24px;align-items:center;justify-content:center}.cloud-icon{color:#FFA500;font-size:34px}.cloud-title{margin-top:10px;color:#fff;font-size:17px;font-weight:600}.cloud-copy{margin-top:8px;color:#c9d1d9;font-size:11px;text-align:center}.cloud-expire{margin-top:6px;color:#9ca8b2;font-size:10px}.refresh-auth{margin-top:16px;width:130px;height:36px;line-height:36px;border-radius:18px;background:#0F62FE;color:#fff;font-size:11px}.lesson-card,.progress-card{margin:14px 16px;padding:18px;border-radius:15px;background:#fff}.lesson-title{color:#243830;font-size:20px;font-weight:700}.lesson-summary{margin-top:9px;color:#697771;font-size:12px;line-height:19px}.meta-row{margin-top:14px;flex-direction:row;justify-content:space-between;color:#8b9691;font-size:11px}.progress-head,.progress-detail{flex-direction:row;justify-content:space-between}.progress-title{font-size:16px;font-weight:700;color:#2c4038}.progress-number{font-size:18px;font-weight:700;color:#0F62FE}.progress-track{height:7px;margin-top:13px;border-radius:4px;background:#E8F0FE;overflow:hidden}.progress-value{height:7px;border-radius:4px;background:#0F62FE}.progress-detail{margin-top:9px;color:#87928e;font-size:10px}.progress-tip{margin-top:14px;padding:10px;border-radius:9px;background:#E8F0FE;color:#52677f;font-size:10px;line-height:16px}.bottom-space{height:30px}
+</style>

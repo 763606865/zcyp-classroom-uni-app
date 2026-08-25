@@ -1,0 +1,29 @@
+<template>
+	<view class="page"><RcNavBar title="学习" /><view class="header"><text class="title">学习中心</text><text class="subtitle">把每一次学习，都变成成长</text></view>
+		<view class="tabs"><text v-for="item in tabs" :key="item.value" class="tab" :class="{ active: status == item.value }" @click="selectStatus(item.value)">{{ item.label }}</text></view>
+		<scroll-view class="list" scroll-y refresher-enabled :refresher-triggered="refreshing" @refresherrefresh="refresh">
+			<view v-if="loading" class="state"><text>正在加载课程...</text></view>
+			<view v-else-if="!loggedIn" class="empty"><text class="empty-icon">▷</text><text class="empty-title">登录后开始学习</text><text class="empty-copy">课程进度将在多个设备间同步</text><button class="primary" @click="goLogin">立即登录</button></view>
+			<view v-else-if="courses.length == 0" class="empty"><text class="empty-icon">◇</text><text class="empty-title">暂无相关课程</text><text class="empty-copy">报名课程或参加培训后，课程会出现在这里</text></view>
+			<view v-else class="course-list"><view v-for="item in courses" :key="item.id" class="course-card" @click="openCourse(item)"><image v-if="item.course != null && item.course!.cover != null" class="cover" :src="item.course!.cover!" mode="aspectFill" /><view v-else class="cover cover-empty"><text>课程</text></view><view class="body"><text class="course-title">{{ item.course == null ? '课程已下架' : item.course!.title }}</text><text class="meta">{{ statusName(item.status) }} · {{ item.course == null ? 0 : item.course!.lesson_count }} 课时</text><view class="progress-track"><view class="progress-value" :style="{ width: item.progress + '%' }" /></view><view class="progress-line"><text class="progress-text">已学 {{ item.progress }}%</text><text class="continue">{{ item.progress >= 100 ? '查看课程 ›' : '继续学习 ›' }}</text></view></view></view></view>
+			<view class="bottom-space" />
+		</scroll-view><RcTabBar current-path="/pages/study/index" />
+	</view>
+</template>
+<script setup lang="uts">
+	import RcTabBar from '../../components/RcTabBar.uvue'; import RcNavBar from '../../components/RcNavBar.uvue'; import { getMyCourses } from '../../api/classroom.uts'; import { isLoggedIn } from '../../stores/auth.uts'; import type { CourseEnrollment } from '../../types/classroom.uts'
+	type StudyTab = { label : string, value : string }
+	const tabs : StudyTab[] = [{label:'全部',value:''},{label:'学习中',value:'learning'},{label:'已完成',value:'completed'},{label:'已过期',value:'expired'}]
+	const status = ref(''); const courses = ref<CourseEnrollment[]>([]); const loading = ref(false); const refreshing = ref(false); const loggedIn = ref(false)
+	onShow(() => { loggedIn.value = isLoggedIn(); if (loggedIn.value) load() })
+	function load() { loading.value = true; getMyCourses(status.value).then((page) => { courses.value = page.data; loading.value = false; refreshing.value = false }).catch(() => { loading.value = false; refreshing.value = false }) }
+	function selectStatus(value : string) { status.value = value; if (loggedIn.value) load() }
+	function refresh() { refreshing.value = true; if (loggedIn.value) load(); else refreshing.value = false }
+	function goLogin() { uni.navigateTo({ url: '/pages/auth/login?redirect=' + encodeURIComponent('/pages/study/index') }) }
+	function openCourse(item : CourseEnrollment) { if (item.course == null) return; uni.navigateTo({ url: `/pages/study/detail?id=${item.course!.id}` }) }
+	function statusName(value : string) : string { if (value == 'completed') return '已完成'; if (value == 'expired') return '已过期'; if (value == 'cancelled') return '已取消'; return '学习中' }
+</script>
+<style scoped>
+	.page{flex:1;background:#f4f7f5}.header{padding:32px 20px 20px;background:#fff}.title{font-size:25px;font-weight:700;color:#16362c}.subtitle{margin-top:7px;font-size:13px;color:#7b8b85}.tabs{height:50px;padding:0 12px;background:#fff;flex-direction:row;border-bottom:1px solid #eef1ef}.tab{flex:1;text-align:center;line-height:50px;font-size:13px;color:#77837f}.active{color:#176b52;font-weight:700;border-bottom:2px solid #176b52}.list{flex:1}.course-list{padding:14px 16px}.course-card{margin-bottom:12px;padding:12px;border-radius:15px;background:#fff;flex-direction:row}.cover{width:108px;height:88px;border-radius:10px;background:#dce9e4}.cover-empty{align-items:center;justify-content:center;color:#176b52;font-size:13px}.body{flex:1;margin-left:13px}.course-title{font-size:16px;font-weight:600;color:#24352f}.meta{margin-top:7px;font-size:11px;color:#84908c}.progress-track{height:5px;margin-top:16px;border-radius:3px;background:#e7ecea;overflow:hidden}.progress-value{height:5px;border-radius:3px;background:#2a8a69}.progress-line{margin-top:7px;flex-direction:row;justify-content:space-between}.progress-text{font-size:11px;color:#89938f}.continue{font-size:11px;color:#176b52}.state,.empty{padding:70px 24px;align-items:center;color:#87938e}.empty-icon{width:58px;height:58px;line-height:58px;text-align:center;border-radius:20px;background:#e5f0ec;color:#176b52;font-size:25px}.empty-title{margin-top:18px;font-size:18px;font-weight:600;color:#31423c}.empty-copy{margin-top:8px;font-size:12px;color:#89938f;text-align:center}.primary{margin-top:22px;width:150px;height:42px;line-height:42px;border-radius:21px;background:#176b52;color:#fff;font-size:14px}.bottom-space{height:88px}
+	.page{background:#F5F7FA}.active{color:#0F62FE;border-bottom-color:#0F62FE}.cover,.empty-icon{background:#E8F0FE}.cover-empty,.continue,.empty-icon{color:#0F62FE}.progress-value,.primary{background:#0F62FE}
+</style>

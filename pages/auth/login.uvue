@@ -1,199 +1,66 @@
 <template>
+	<RcNavBar title="登录" :show-back="true" :show-search="false" :show-scan="false" />
 	<scroll-view class="login-page" scroll-y>
-		<view class="login-header">
-			<view class="brand"><text class="brand-text">Rc</text></view>
-			<text class="title">登录中测易招</text>
-			<text class="subtitle">首次验证成功将自动注册账号</text>
-		</view>
-
+		<view class="login-header"><view class="brand"><text class="brand-text">中</text></view><text class="title">手机号登录</text><text class="subtitle">未注册手机号验证后将自动创建账号</text></view>
 		<view class="login-card">
-			<view class="mode-tabs">
-				<view class="mode-tab" :class="{ 'mode-tab-selected': mode == 'phone' }" @click="setMode('phone')">
-					<text class="mode-tab-text" :class="{ 'mode-tab-text-selected': mode == 'phone' }">手机号</text>
-				</view>
-				<view class="mode-tab" :class="{ 'mode-tab-selected': mode == 'email' }" @click="setMode('email')">
-					<text class="mode-tab-text" :class="{ 'mode-tab-text-selected': mode == 'email' }">邮箱</text>
-				</view>
-			</view>
-
-			<input
-				v-if="mode == 'phone'"
-				v-model="account"
-				class="field"
-				type="number"
-				maxlength="11"
-				placeholder="请输入手机号"
-			/>
-			<input
-				v-else
-				v-model="account"
-				class="field"
-				type="text"
-				placeholder="请输入邮箱"
-			/>
-
-			<view class="code-row">
-				<input v-model="code" class="field code-field" type="number" maxlength="6" placeholder="6位验证码" />
-				<button class="code-button" :disabled="countdown > 0 || sending" @click="sendCode">
-					{{ countdown > 0 ? countdown + 's' : '获取验证码' }}
-				</button>
-			</view>
-
-			<button class="login-button" :loading="submitting" :disabled="submitting" @click="submit">
-				登录 / 注册
-			</button>
-
-			<view class="agreement" @click="agreed = !agreed">
-				<view class="checkbox" :class="{ checked: agreed }">
-					<text v-if="agreed" class="checkbox-mark">✓</text>
-				</view>
-				<text class="agreement-text">我已阅读并同意《用户协议》和《隐私政策》</text>
-			</view>
-
-			<!-- #ifdef MP-WEIXIN || APP-ANDROID || APP-IOS -->
-			<view class="wechat-entry" @click="goWechatLogin">
-				<text class="wechat-entry-text">微信一键登录</text>
-			</view>
-			<!-- #endif -->
+			<text class="field-label">手机号</text>
+			<view v-if="useSavedPhone" class="saved-phone"><view><text class="saved-phone-value">{{ maskedPhone }}</text><text class="saved-phone-tip">验证码将发送到当前手机号</text></view><text class="change-phone" @click="changePhone">更换手机号</text></view>
+			<input v-else v-model="phone" class="field" type="number" maxlength="11" placeholder="请输入中国大陆手机号" />
+			<text class="field-label code-label">短信验证码</text>
+			<view class="code-row"><input v-model="code" class="field code-field" type="number" maxlength="6" placeholder="请输入6位验证码" /><button class="code-button" :disabled="countdown > 0 || sending" @click="sendCode">{{ countdown > 0 ? countdown + 's' : '获取验证码' }}</button></view>
+			<button class="login-button" :loading="submitting" :disabled="submitting" @click="submit">{{ useSavedPhone ? '当前手机号登录' : '登录 / 注册' }}</button>
+			<view class="agreement" @click="agreed = !agreed"><view class="checkbox" :class="{ checked: agreed }"><text v-if="agreed" class="checkbox-mark">✓</text></view><text class="agreement-text">我已阅读并同意《用户协议》和《隐私政策》</text></view>
 		</view>
 	</scroll-view>
 </template>
 
 <script setup lang="uts">
-	import { phoneLogin, emailLogin, sendVerificationCode } from '../../api/auth.uts'
-	import { setSession } from '../../stores/auth.uts'
-	import { requestLocationAfterLogin } from '../../utils/location.uts'
+	import { phoneLogin, sendSmsCode } from '../../api/auth.uts'
+	import RcNavBar from '../../components/RcNavBar.uvue'
+	import { getLastLoginPhone, setSession } from '../../stores/auth.uts'
 
-	const mode = ref('phone')
-	const account = ref('')
-	const code = ref('')
-	const agreed = ref(false)
-	const sending = ref(false)
-	const submitting = ref(false)
-	const countdown = ref(0)
+	const phone = ref(''); const code = ref(''); const agreed = ref(true); const sending = ref(false); const submitting = ref(false); const countdown = ref(0); const useSavedPhone = ref(false)
+	const maskedPhone = computed(() : string => validPhone() ? phone.value.substring(0, 3) + '****' + phone.value.substring(7, 11) : '')
 	let timer : number | null = null
-	let redirect = '/pages/jobs/index'
+	let redirect = '/pages/index/index'
 
 	onLoad((options : UTSJSONObject) => {
-		const redirectValue = options['redirect'] as string | null
-		if (redirectValue != null && redirectValue != '') {
-			const decoded = decodeURIComponent(redirectValue)
-			if (decoded != null) redirect = decoded
-		}
+		const value = options['redirect'] as string | null
+		if (value != null && value != '') redirect = decodeURIComponent(value)
+		// #ifdef APP
+		const savedPhone = getLastLoginPhone()
+		if (/^1\d{10}$/.test(savedPhone)) { phone.value = savedPhone; useSavedPhone.value = true }
+		// #endif
 	})
+	onUnmounted(() => { if (timer != null) clearInterval(timer!) })
 
-	onUnmounted(() => {
-		if (timer != null) clearInterval(timer!)
-	})
-
-	function goWechatLogin() {
-		uni.navigateTo({ url: `/pages/auth/wechat?redirect=${encodeURIComponent(redirect)}` })
-	}
-
-	function setMode(value : string) {
-		mode.value = value
-		account.value = ''
-		code.value = ''
-	}
-
-	function validAccount() : boolean {
-		if (mode.value == 'phone') return /^1\d{10}$/.test(account.value)
-		return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(account.value)
-	}
-
-	function showError(message : string) {
-		uni.showToast({ title: message, icon: 'none' })
-	}
-
-	function errorMessage(error : any | null, fallback : string) : string {
-		if (error == null) return fallback
-		const cause = error as Error
-		if (cause.message == '') return fallback
-		return cause.message
-	}
+	function validPhone() : boolean { return /^1\d{10}$/.test(phone.value) }
+	function showError(message : string) { uni.showToast({ title: message, icon: 'none' }) }
+	function errorMessage(error : any | null, fallback : string) : string { if (error == null) return fallback; const cause = error as Error; return cause.message == '' ? fallback : cause.message }
+	function changePhone() { useSavedPhone.value = false; phone.value = ''; code.value = ''; countdown.value = 0; if (timer != null) { clearInterval(timer!); timer = null } }
 
 	function sendCode() {
-		if (!validAccount()) {
-			showError(mode.value == 'phone' ? '请输入正确的手机号' : '请输入正确的邮箱')
-			return
-		}
+		if (!validPhone()) { showError('请输入正确的手机号'); return }
 		sending.value = true
-		sendVerificationCode(mode.value, account.value).then(() => {
-			countdown.value = 60
-			timer = setInterval(() => {
-				countdown.value--
-				if (countdown.value <= 0 && timer != null) {
-					clearInterval(timer!)
-					timer = null
-				}
-			}, 1000)
-			uni.showToast({ title: '验证码已发送', icon: 'success' })
-			sending.value = false
-		}).catch((error : any | null) => {
-			showError(errorMessage(error, '验证码发送失败'))
-			sending.value = false
-		})
+		sendSmsCode(phone.value).then((result) => {
+			countdown.value = result.expires_in > 60 ? 60 : result.expires_in
+			timer = setInterval(() => { countdown.value--; if (countdown.value <= 0 && timer != null) { clearInterval(timer!); timer = null } }, 1000)
+			uni.showToast({ title: result.message == '' ? '验证码已发送' : result.message, icon: 'success' }); sending.value = false
+		}).catch((error : any | null) => { showError(errorMessage(error, '验证码发送失败')); sending.value = false })
 	}
 
 	function submit() {
-		if (!validAccount()) {
-			showError(mode.value == 'phone' ? '请输入正确的手机号' : '请输入正确的邮箱')
-			return
-		}
-		if (!/^\d{6}$/.test(code.value)) {
-			showError('请输入6位验证码')
-			return
-		}
-		if (!agreed.value) {
-			showError('请先同意用户协议和隐私政策')
-			return
-		}
-
+		if (!validPhone()) { showError('请输入正确的手机号'); return }
+		if (!/^\d{6}$/.test(code.value)) { showError('请输入6位验证码'); return }
+		if (!agreed.value) { showError('请先同意用户协议和隐私政策'); return }
 		submitting.value = true
-		const task = mode.value == 'phone'
-			? phoneLogin(account.value, code.value)
-			: emailLogin(account.value.toLowerCase(), code.value)
-		task.then((result) => {
-			setSession(result)
-			requestLocationAfterLogin()
-			uni.showToast({ title: '登录成功', icon: 'success' })
-			if (redirect == '/pages/jobs/index' && result.user.current_identity != null && result.user.current_identity!.identity_type == 2) {
-				redirect = '/pages/talents/index'
-			}
-			setTimeout(() => {
-				uni.reLaunch({ url: redirect })
-			}, 300)
-			submitting.value = false
-		}).catch((error : any | null) => {
-			showError(errorMessage(error, '登录失败'))
-			submitting.value = false
-		})
+		phoneLogin(phone.value, code.value).then((result) => {
+			setSession(result); uni.showToast({ title: '登录成功', icon: 'success' })
+			setTimeout(() => { uni.reLaunch({ url: redirect }) }, 300); submitting.value = false
+		}).catch((error : any | null) => { showError(errorMessage(error, '登录失败')); submitting.value = false })
 	}
 </script>
 
 <style scoped>
-	.login-page { flex: 1; background-color: #f3fbf7; }
-	.login-header { padding: 70px 28px 28px; align-items: center; }
-	.brand { width: 64px; height: 64px; border-radius: 20px; align-items: center; justify-content: center; background-color: #19a974; }
-	.brand-text { color: #fff; font-size: 27px; font-weight: 700; }
-	.title { margin-top: 20px; font-size: 24px; font-weight: 700; }
-	.subtitle { margin-top: 8px; color: #7b8680; font-size: 13px; }
-	.login-card { margin: 0 20px; padding: 24px; border-radius: 18px; background-color: #fff; }
-	.mode-tabs { flex-direction: row; margin-bottom: 22px; border-bottom: 1px solid #eef0f3; }
-	.mode-tab { flex: 1; padding: 12px 0; align-items: center; }
-	.mode-tab-selected { border-bottom: 2px solid #19a974; }
-	.mode-tab-text { color: #8a9099; font-size: 16px; }
-	.mode-tab-text-selected { color: #159669; font-weight: 600; }
-	.field { height: 48px; padding: 0 14px; border-radius: 10px; background-color: #f6f7f9; font-size: 15px; }
-	.code-row { margin-top: 14px; flex-direction: row; }
-	.code-field { flex: 1; }
-	.code-button { width: 118px; height: 48px; margin-left: 10px; padding: 0; line-height: 48px; border-radius: 10px; background-color: #eaf8f2; color: #159669; font-size: 13px; }
-	.login-button { margin-top: 24px; height: 48px; line-height: 48px; border-radius: 12px; background-color: #19a974; color: #fff; font-size: 16px; font-weight: 600; }
-	.agreement { margin-top: 18px; flex-direction: row; align-items: center; justify-content: center; }
-	.checkbox { width: 16px; height: 16px; border: 1px solid #c6ccd2; border-radius: 4px; align-items: center; justify-content: center; }
-	.checkbox-mark { color: #fff; font-size: 11px; }
-	.checked { background-color: #19a974; border-color: #19a974; }
-	.agreement-text { margin-left: 7px; font-size: 11px; color: #7b8188; }
-	.wechat-entry { margin-top: 18px; align-items: center; }
-	.wechat-entry-text { font-size: 13px; color: #19a974; font-weight: 600; }
+	.login-page{flex:1;background:#F5F7FA}.login-header{padding:72px 28px 32px;align-items:center}.brand{width:64px;height:64px;border-radius:20px;align-items:center;justify-content:center;background:#0F62FE}.brand-text{color:#fff;font-size:27px;font-weight:700}.title{margin-top:20px;font-size:24px;font-weight:700;color:#18352c}.subtitle{margin-top:8px;color:#7b8680;font-size:13px}.login-card{margin:0 20px;padding:26px 24px;border-radius:18px;background:#fff}.field-label{margin-bottom:9px;color:#354840;font-size:13px;font-weight:600}.saved-phone{height:58px;padding:0 14px;border-radius:10px;background:#F5F7FA;flex-direction:row;align-items:center;justify-content:space-between}.saved-phone-value{font-size:17px;font-weight:600;color:#263b34}.saved-phone-tip{margin-top:3px;font-size:10px;color:#8a9691}.change-phone{font-size:12px;color:#0F62FE}.code-label{margin-top:18px}.field{height:48px;padding:0 14px;border-radius:10px;background:#F5F7FA;font-size:15px}.code-row{flex-direction:row}.code-field{flex:1}.code-button{width:118px;height:48px;margin-left:10px;padding:0;line-height:48px;border-radius:10px;background:#E8F0FE;color:#0F62FE;font-size:13px}.login-button{margin-top:26px;height:48px;line-height:48px;border-radius:12px;background:#0F62FE;color:#fff;font-size:16px;font-weight:600}.agreement{margin-top:18px;flex-direction:row;align-items:center;justify-content:center}.checkbox{width:16px;height:16px;border:1px solid #c6ccd2;border-radius:4px;align-items:center;justify-content:center}.checkbox-mark{color:#fff;font-size:11px}.checked{background:#0F62FE;border-color:#0F62FE}.agreement-text{margin-left:7px;font-size:11px;color:#7b8188}
 </style>

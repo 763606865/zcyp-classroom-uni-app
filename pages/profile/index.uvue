@@ -1,189 +1,28 @@
 <template>
-	<scroll-view class="rc-page profile-page" scroll-y>
-		<view class="profile-header">
-			<view class="avatar">
-				<image v-if="user != null && hasText(user!.avatar)" class="avatar-image" :src="user!.avatar!" mode="aspectFill" />
-				<text v-else class="avatar-text">{{ initials }}</text>
-			</view>
-			<view v-if="user != null" class="user-main">
-				<text class="user-name">{{ displayName }}</text>
-				<text class="user-account">{{ displayAccount }}</text>
-			</view>
-			<view v-else class="user-main" @click="goLogin">
-				<text class="user-name">登录 / 注册</text>
-				<text class="user-account">登录后管理简历与招聘事务</text>
-			</view>
-		</view>
-
-		<view v-if="user != null" class="identity-card" @click="openIdentitySelector">
-			<view>
-				<text class="section-label">当前身份</text>
-				<text class="identity-name">{{ identityName }}</text>
-				<text v-if="organizationName != ''" class="organization-name">{{ organizationName }}</text>
-			</view>
-			<text class="switch-action">切换身份 ›</text>
-		</view>
-
-		<view class="menu-card">
-			<view v-for="item in menus" :key="item.label" class="menu-row" @click="handleMenu(item.action)">
-				<text class="menu-icon">{{ item.icon }}</text>
-				<text class="menu-label">{{ item.label }}</text>
-				<text class="menu-arrow">›</text>
-			</view>
-		</view>
-
-		<button v-if="user != null" class="logout-button" @click="confirmLogout">退出登录</button>
-		<text class="version">中测易招 · 当前版本 {{ version }}</text>
-	</scroll-view>
-	<RcTabBar current-path="/pages/profile/index" />
+	<RcNavBar title="我的" />
+	<scroll-view class="page" scroll-y><view class="profile-head" @click="openProfile"><view class="avatar"><image v-if="user != null && user!.avatar != null" class="avatar-image" :src="user!.avatar!" mode="aspectFill" /><text v-else>{{ user == null ? '未' : displayName.substring(0,1) }}</text></view><view class="user-info"><text class="user-name">{{ user == null ? '登录 / 注册' : displayName }}</text><text class="user-copy">{{ user == null ? '登录后查看学习档案与培训' : displayAccount }}</text></view><text class="arrow">›</text></view>
+		<view class="summary"><view class="summary-item" @click="showSoon('学习时长')"><text class="summary-num">--</text><text class="summary-label">学习时长</text></view><view class="summary-item" @click="showSoon('已学课程')"><text class="summary-num">--</text><text class="summary-label">已学课程</text></view><view class="summary-item" @click="showSoon('我的证书')"><text class="summary-num">--</text><text class="summary-label">我的证书</text></view></view>
+		<view class="section"><text class="section-title">我的学习</text><view class="grid"><view v-for="item in learningMenus" :key="item.label" class="grid-item" @click="handle(item.action)"><text class="grid-icon">{{ item.icon }}</text><text class="grid-label">{{ item.label }}</text></view></view></view>
+		<view class="section"><text class="section-title">服务与设置</text><view class="menu-row" v-for="item in serviceMenus" :key="item.label" @click="handle(item.action)"><text class="menu-icon">{{ item.icon }}</text><text class="menu-label">{{ item.label }}</text><text class="arrow">›</text></view></view>
+		<text class="version">中测培训 · {{ version }}</text><view class="bottom-space" />
+	</scroll-view><RcTabBar current-path="/pages/profile/index" />
 </template>
-
 <script setup lang="uts">
-	import RcTabBar from '../../components/RcTabBar.uvue'
-	import { clearSession, getUser, setSession } from '../../stores/auth.uts'
-	import { logout, refreshTokenByIdentityType } from '../../api/auth.uts'
-	import type { AuthUser } from '../../types/auth.uts'
-
+	import RcTabBar from '../../components/RcTabBar.uvue'; import RcNavBar from '../../components/RcNavBar.uvue'; import { getUser } from '../../stores/auth.uts'; import type { AuthUser } from '../../types/auth.uts'
 	type MenuItem = { label : string, icon : string, action : string }
-
-	const user = ref<AuthUser | null>(null)
-	const version = ref('1.0.0')
-	const menus : MenuItem[] = [
-		{ label: '我的简历', icon: '⌑', action: 'resume' },
-		{ label: '账号与安全', icon: '◎', action: 'account' },
-		{ label: '隐私设置', icon: '◉', action: 'privacy' },
-		{ label: '我的收藏', icon: '☆', action: 'favorites' },
-		{ label: '帮助与反馈', icon: '?', action: 'feedback' },
-		{ label: '关于我们', icon: 'i', action: 'about' }
-	]
-
-	function hasText(value : string | null) : boolean {
-		return value != null && value != ''
-	}
-
-	const displayName = computed(() : string => {
-		if (user.value == null) return ''
-		if (hasText(user.value!.name)) return user.value!.name!
-		return hasText(user.value!.nickname) ? user.value!.nickname! : 'Rc用户'
-	})
-	const displayAccount = computed(() : string => {
-		if (user.value == null) return ''
-		if (hasText(user.value!.phone)) return user.value!.phone!
-		return hasText(user.value!.email) ? user.value!.email! : ''
-	})
-	const initials = computed(() : string => {
-		const name = displayName.value
-		return name == '' ? 'Rc' : name.substring(0, 1)
-	})
-	const identityName = computed(() : string => {
-		const identity = user.value == null ? null : user.value!.current_identity
-		return identity == null ? '求职者' : identity.identity_name
-	})
-	const organizationName = computed(() : string => {
-		const identity = user.value == null ? null : user.value!.current_identity
-		if (identity == null) return ''
-		if (hasText(identity.organization_name)) return identity.organization_name!
-		return identity.organization == null ? '' : identity.organization!.name
-	})
-
-	onShow(() => {
-		user.value = getUser()
-		const appVersion = uni.getAppBaseInfo().appVersion
-		version.value = appVersion == null || appVersion == '' ? '1.0.0' : appVersion
-	})
-
-	function errorMessage(error : any | null, fallback : string) : string {
-		return fallback
-	}
-
-	function goLogin() {
-		uni.navigateTo({ url: '/pages/auth/login?redirect=' + encodeURIComponent('/pages/profile/index') })
-	}
-
-	function switchIdentity(identityType : number) {
-		const current = user.value == null ? null : user.value!.current_identity
-		if (current != null && current.identity_type == identityType) return
-		uni.showLoading({ title: '正在切换' })
-		refreshTokenByIdentityType(identityType).then((result) => {
-			setSession(result)
-			user.value = result.user
-			uni.showToast({ title: '身份已切换', icon: 'success' })
-			const destination = identityType == 2 ? '/pages/talents/index' : '/pages/jobs/index'
-			setTimeout(() => {
-				uni.reLaunch({ url: destination })
-			}, 300)
-			uni.hideLoading()
-		}).catch((error : any | null) => {
-			uni.showToast({ title: errorMessage(error, '身份切换失败'), icon: 'none' })
-			uni.hideLoading()
-		})
-	}
-
-	function openIdentitySelector() {
-		uni.showActionSheet({
-			itemList: ['求职者', '招聘方'],
-			success: (result) => {
-				switchIdentity(result.tapIndex == 0 ? 1 : 2)
-			}
-		})
-	}
-
-	function handleMenu(action : string) {
-		if (user.value == null) {
-			goLogin()
-			return
-		}
-		if (action == 'resume') {
-			const identity = user.value!.current_identity
-			if (identity != null && identity.identity_type != 1) {
-				uni.showToast({ title: '请先切换到求职者身份', icon: 'none' })
-				return
-			}
-			uni.navigateTo({ url: '/pages/resume/index' })
-			return
-		}
-		uni.showToast({ title: '功能即将开放', icon: 'none' })
-	}
-
-	function confirmLogout() {
-		uni.showModal({
-			title: '退出登录',
-			content: '确定要退出当前账号吗？',
-				success: (result) => {
-				if (!result.confirm) return
-				logout().then(() => {
-					clearSession()
-					user.value = null
-					uni.reLaunch({ url: '/pages/jobs/index' })
-				}).catch(() => {
-					clearSession()
-					user.value = null
-					uni.reLaunch({ url: '/pages/jobs/index' })
-				})
-			}
-		})
-	}
+	const learningMenus : MenuItem[] = [{label:'我的培训',icon:'培',action:'training'},{label:'我的班级',icon:'班',action:'class'},{label:'我的考试',icon:'考',action:'exam'},{label:'我的练习',icon:'练',action:'practice'},{label:'我的作业',icon:'作',action:'homework'},{label:'我的证书',icon:'证',action:'certificate'}]
+	const serviceMenus : MenuItem[] = [{label:'支付记录',icon:'¥',action:'payments'},{label:'收藏课程',icon:'☆',action:'favorites'},{label:'帮助与反馈',icon:'?',action:'help'},{label:'设置',icon:'⚙',action:'settings'}]
+	const user = ref<AuthUser | null>(null); const version = ref('1.0.0')
+	const displayName = computed(() : string => user.value == null ? '' : (user.value!.real_name == null || user.value!.real_name == '' ? (user.value!.nick_name == null ? '课堂用户' : user.value!.nick_name!) : user.value!.real_name!))
+	const displayAccount = computed(() : string => user.value == null ? '' : user.value!.phone)
+	onShow(() => { user.value = getUser(); const v = uni.getAppBaseInfo().appVersion; version.value = v == null || v == '' ? '1.0.0' : v })
+	function goLogin() { uni.navigateTo({ url: '/pages/auth/login?redirect=' + encodeURIComponent('/pages/profile/index') }) }
+	function openProfile() { if (user.value == null) { goLogin(); return }; uni.navigateTo({ url:'/pages/profile/detail' }) }
+	function handle(action : string) { if (user.value == null && action != 'help') { goLogin(); return }; if (action == 'settings') { openProfile(); return }; showSoon(menuName(action)) }
+	function menuName(action : string) : string { for (let i = 0; i < learningMenus.length; i++) if (learningMenus[i].action == action) return learningMenus[i].label; for (let i = 0; i < serviceMenus.length; i++) if (serviceMenus[i].action == action) return serviceMenus[i].label; return '该功能' }
+	function showSoon(name : string) { uni.showToast({ title: `${name}即将开放`, icon: 'none' }) }
 </script>
-
 <style scoped>
-	.profile-page { padding-bottom: 90px; }
-	.profile-header { padding: 28px 22px 22px; flex-direction: row; align-items: center; background-color: #ecf9f3; }
-	.avatar { width: 64px; height: 64px; border-radius: 32px; align-items: center; justify-content: center; background-color: #19a974; overflow: hidden; }
-	.avatar-image { width: 64px; height: 64px; }
-	.avatar-text { color: #fff; font-size: 22px; font-weight: 700; }
-	.user-main { flex: 1; margin-left: 16px; }
-	.user-name { font-size: 21px; font-weight: 700; }
-	.user-account { margin-top: 6px; color: #718078; font-size: 13px; }
-	.identity-card { margin: 14px 16px; padding: 18px; border-radius: 14px; background-color: #fff; flex-direction: row; justify-content: space-between; align-items: center; }
-	.section-label { font-size: 11px; color: #9aa0a6; }
-	.identity-name { margin-top: 6px; font-size: 17px; font-weight: 600; }
-	.organization-name { margin-top: 4px; color: #6e757b; font-size: 12px; }
-	.switch-action { color: #159669; font-size: 13px; }
-	.menu-card { margin: 14px 16px; border-radius: 14px; background-color: #fff; overflow: hidden; }
-	.menu-row { height: 54px; padding: 0 18px; flex-direction: row; align-items: center; border-bottom: 1px solid #f1f2f4; }
-	.menu-icon { width: 28px; color: #19a974; font-size: 18px; }
-	.menu-label { flex: 1; font-size: 15px; }
-	.menu-arrow { color: #c0c5ca; font-size: 22px; }
-	.logout-button { margin: 20px 16px 0; height: 46px; line-height: 46px; color: #e24a4a; background-color: #fff; border-radius: 12px; font-size: 15px; }
-	.version { padding: 20px 0 10px; text-align: center; color: #a5abb1; font-size: 11px; }
+	.page{flex:1;background:#f4f7f5}.profile-head{padding:34px 20px 28px;background:#123f34;flex-direction:row;align-items:center}.avatar{width:62px;height:62px;border-radius:22px;background:#e1f1ea;color:#176b52;font-size:20px;font-weight:700;align-items:center;justify-content:center;overflow:hidden}.avatar-image{width:62px;height:62px}.user-info{flex:1;margin-left:15px}.user-name{color:#fff;font-size:21px;font-weight:700}.user-copy{margin-top:6px;color:#b7d0c7;font-size:12px}.arrow{color:#a9b7b2;font-size:24px}.summary{margin:-12px 16px 16px;padding:18px 6px;border-radius:16px;background:#fff;flex-direction:row}.summary-item{flex:1;align-items:center}.summary-num{color:#183b30;font-size:19px;font-weight:700}.summary-label{margin-top:6px;color:#84908c;font-size:11px}.section{margin:0 16px 14px;padding:17px 16px;border-radius:16px;background:#fff}.section-title{font-size:17px;font-weight:700;color:#263b34}.grid{margin-top:16px;flex-direction:row;flex-wrap:wrap}.grid-item{width:33.33%;margin-bottom:18px;align-items:center}.grid-icon{width:39px;height:39px;line-height:39px;text-align:center;border-radius:13px;background:#e8f2ee;color:#176b52;font-size:14px;font-weight:600}.grid-label{margin-top:7px;color:#43534d;font-size:12px}.menu-row{height:50px;flex-direction:row;align-items:center;border-bottom:1px solid #f0f2f1}.menu-icon{width:30px;color:#176b52;font-size:16px}.menu-label{flex:1;color:#354740;font-size:14px}.version{padding:18px;text-align:center;color:#9ba5a1;font-size:10px}.bottom-space{height:72px}
+	.page{background:#F5F7FA}.profile-head{background:#0F62FE}.avatar,.grid-icon{background:#E8F0FE;color:#0F62FE}.user-copy{color:#fff}.menu-icon{color:#0F62FE}
 </style>

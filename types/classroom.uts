@@ -1,0 +1,28 @@
+export type TeacherSummary = { id : number, name : string, title : string | null, avatar : string | null }
+export type CourseSummary = { id : number, title : string, subtitle : string | null, cover : string | null, summary : string | null, is_free : boolean, price : string, duration_minutes : number, lesson_count : number, teacher : TeacherSummary | null }
+export type TrainingSummary = { id : number, title : string, cover : string | null, summary : string | null, type : string, location : string | null, start_at : string | null, is_free : boolean, price : string, enroll_count : number }
+export type BannerSummary = { id : number, title : string, subtitle : string | null, cover : string | null, summary : string | null, external_url : string | null }
+export type ClassroomHome = { banners : BannerSummary[], featured_trainings : TrainingSummary[], latest_trainings : TrainingSummary[], featured_courses : CourseSummary[] }
+export type CourseEnrollment = { id : number, status : string, source : string, progress : number, last_learned_at : string | null, course : CourseSummary | null }
+export type CoursePage = { current_page : number, data : CourseEnrollment[], per_page : number, total : number, last_page : number }
+
+export type LessonProgress = { status : string, progress_seconds : number, progress : number, started_at : string | null, last_learned_at : string | null, completed_at : string | null }
+export type LiveSessionSummary = { id : number, title : string, status : string, scheduled_start_at : string | null, scheduled_end_at : string | null, online_count : number }
+export type CourseLesson = { id : number, title : string, type : string, summary : string | null, content : string | null, media_url : string | null, media_id : string | null, media_provider : string | null, duration_seconds : number, is_free_preview : boolean, sort : number, live_sessions : LiveSessionSummary[], progress : LessonProgress }
+export type CourseChapter = { id : number, title : string, summary : string | null, sort : number, lessons : CourseLesson[] }
+export type CourseProgressSummary = { total_lessons : number, completed_lessons : number, continue_lesson_id : number | null }
+export type CourseProgressDetail = { course : CourseSummary, enrollment : CourseEnrollment, summary : CourseProgressSummary, chapters : CourseChapter[], ungrouped_lessons : CourseLesson[] }
+
+export type CourseInteractions = { favorite_count : number, like_count : number, share_count : number, favorited : boolean, liked : boolean }
+export type CommentSummary = { count : number, average_rating : number }
+export type CourseCommentUser = { name : string | null, avatar : string | null }
+export type CourseComment = { id : number, rating : number, content : string, is_anonymous : boolean, created_at : string, student : CourseCommentUser | null }
+export type CourseCommentPage = { data : CourseComment[] }
+export type CourseComments = { summary : CommentSummary, comments : CourseCommentPage }
+
+export type LivePlayUrls = { webrtc : string | null, flv : string | null, hls : string | null, expires_at : string | null }
+export type LivePlayback = { file_id : string | null, url : string | null }
+export type LiveSessionDetail = { session : LiveSessionSummary, play_urls : LivePlayUrls | null, playback : LivePlayback | null }
+
+export type VodPlayAuth = { provider : string, media_id : string, play_auth : string, app_id : string | number | null, expires_in : number }
+export type CourseProgressUpdate = { message : string, lesson_progress : LessonProgress, course_progress : LessonProgress }

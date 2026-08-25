@@ -6,13 +6,78 @@ function fallbackMessage(value : string | null, fallback : string) : string {
 	return value == null || value == '' ? fallback : value
 }
 
+export function getClientHeaders() : UTSJSONObject {
+	const app = uni.getAppBaseInfo()
+	const device = uni.getDeviceInfo()
+	let deviceId = uni.getStorageSync('classroom_device_id') as string
+	if (deviceId == null || deviceId == '') {
+		deviceId = `${Date.now()}-${Math.floor(Math.random() * 1000000)}`
+		uni.setStorageSync('classroom_device_id', deviceId)
+	}
+	// 客户端类型必须按 uni-app 的编译目标判断。H5 运行在移动设备模拟器时，
+	// device.platform 可能是 mac、windows 等宿主平台，不能据此推断为小程序。
+	let clientType = 'web'
+	let platform = 'web'
+	let channel = 'web'
+
+	// #ifdef APP-IOS
+	clientType = 'app-ios'
+	platform = 'ios'
+	channel = 'appstore'
+	// #endif
+
+	// #ifdef APP-ANDROID
+	clientType = 'app-android'
+	platform = 'android'
+	channel = 'official'
+	// #endif
+
+	// #ifdef APP-HARMONY
+	clientType = 'app-harmony'
+	platform = 'harmony'
+	channel = 'official'
+	// #endif
+
+	// #ifdef MP-WEIXIN
+	clientType = 'mini-program'
+	platform = 'wechat'
+	channel = 'wechat'
+	// #endif
+
+	// #ifdef MP-ALIPAY
+	clientType = 'mini-program'
+	platform = 'alipay'
+	channel = 'alipay'
+	// #endif
+
+	// #ifdef MP-BAIDU
+	clientType = 'mini-program'
+	platform = 'baidu'
+	channel = 'baidu'
+	// #endif
+
+	// #ifdef MP-TOUTIAO
+	clientType = 'mini-program'
+	platform = 'toutiao'
+	channel = 'toutiao'
+	// #endif
+	return {
+		'Accept': 'application/json',
+		'Content-Type': 'application/json',
+		'X-Client-Type': clientType,
+		'X-App-Version': app.appVersion == null ? '1.0.0' : app.appVersion,
+		'X-App-Build': app.appVersionCode == null ? '100000' : `${app.appVersionCode}`,
+		'X-Platform': platform,
+		'X-OS-Version': device.osVersion == null ? '' : device.osVersion,
+		'X-Device-ID': deviceId,
+		'X-Channel': channel
+	} as UTSJSONObject
+}
+
 export function request<T>(path : string, method : RequestMethod = 'GET', data : any | null = null, requireAuth : boolean = true) : Promise<T> {
 	return new Promise<T>((resolve, reject) => {
 		const token = getToken()
-		const headers = {
-			'Accept': 'application/json',
-			'Content-Type': 'application/json'
-		} as UTSJSONObject
+		const headers = getClientHeaders()
 		if (token != '') {
 			headers['Authorization'] = `Bearer ${token}`
 		}
@@ -31,6 +96,10 @@ export function request<T>(path : string, method : RequestMethod = 'GET', data :
 						uni.navigateTo({ url: LOGIN_PATH })
 					}
 					reject(new Error('登录状态已失效，请重新登录'))
+					return
+				}
+				if (statusCode == 426) {
+					reject(new Error('客户端版本过低，请升级后继续使用'))
 					return
 				}
 

@@ -1,7 +1,8 @@
-import type { AuthUser, LoginResult, UserIdentity } from '../types/auth.uts'
+import type { AuthUser, LoginResult } from '../types/auth.uts'
 
 const TOKEN_KEY = 'rc_access_token'
 const USER_KEY = 'rc_auth_user'
+const LAST_PHONE_KEY = 'classroom_last_login_phone'
 
 let accessToken = ''
 let currentUser : AuthUser | null = null
@@ -30,11 +31,13 @@ export function setSession(result : LoginResult) {
 	currentUser = result.user
 	uni.setStorageSync(TOKEN_KEY, accessToken)
 	uni.setStorageSync(USER_KEY, JSON.stringify(result.user))
+	uni.setStorageSync(LAST_PHONE_KEY, result.user.phone)
 }
 
 export function setUser(user : AuthUser) {
 	currentUser = user
 	uni.setStorageSync(USER_KEY, JSON.stringify(user))
+	uni.setStorageSync(LAST_PHONE_KEY, user.phone)
 }
 
 export function clearSession() {
@@ -58,16 +61,7 @@ export function isLoggedIn() : boolean {
 	return getToken() != ''
 }
 
-export function getCurrentIdentity() : UserIdentity | null {
-	const user = getUser()
-	return user == null ? null : user.current_identity
-}
-
-export function getCurrentIdentityType() : number {
-	const identity = getCurrentIdentity()
-	return identity == null ? 1 : identity.identity_type
-}
-
-export function isRecruiter() : boolean {
-	return getCurrentIdentityType() == 2
+export function getLastLoginPhone() : string {
+	const saved = uni.getStorageSync(LAST_PHONE_KEY)
+	return saved == null ? '' : saved as string
 }

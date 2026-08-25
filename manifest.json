@@ -84,7 +84,11 @@
 				"xxxhdpi": "static/192_192.png"
 			},
 			"splashScreens": {
-				"default": {}
+				"default": {
+					"xhdpi": "static/start-up_720*1280.png",
+					"xxhdpi": "static/start-up_1080*1920.png",
+					"xxxhdpi": "static/start-up_2160*3840.png"
+				}
 			}
 		}
 	},
