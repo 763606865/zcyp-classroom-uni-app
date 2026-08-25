@@ -1,6 +1,6 @@
 <template>
 	<view class="rc-page page">
-		<scroll-view class="content" scroll-y refresher-enabled :refresher-triggered="refreshing" @refresherrefresh="load">
+		<scroll-view class="content" refresher-enabled :refresher-triggered="refreshing" @refresherrefresh="load">
 			<view v-if="loading && conversations.length == 0" class="state"><text class="state-text">正在加载会话...</text></view>
 			<view v-else-if="conversations.length == 0" class="empty">
 				<text class="empty-icon-text">○</text>

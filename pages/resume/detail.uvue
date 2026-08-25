@@ -1,5 +1,5 @@
 <template>
-	<scroll-view class="page" scroll-y>
+	<scroll-view class="page">
 		<view v-if="loading" class="state"><text class="state-text">正在加载简历...</text></view>
 		<view v-else-if="resume != null">
 			<view class="hero">

@@ -1,7 +1,7 @@
 <template>
 	<view class="page"><RcNavBar title="直播课堂" :show-back="true" />
 		<view v-if="loading" class="state"><text>正在进入直播课堂...</text></view>
-		<view v-else-if="detail == null" class="state"><text>直播场次加载失败</text><button class="retry" @click="load">重新加载</button></view>
+		<view v-else-if="detail == null" class="state"><text>直播场次加载失败</text><button class="rc-button retry" hover-class="rc-button-hover" :hover-start-time="20" :hover-stay-time="120" @click="load">重新加载</button></view>
 		<view v-else class="content">
 			<view class="player"><video v-if="playUrl != ''" class="video" :src="playUrl" autoplay controls /><view v-else class="waiting"><text class="waiting-icon">◉</text><text class="waiting-title">{{ statusText(detail!.session.status) }}</text><text class="waiting-copy">{{ timeRange }}</text></view></view>
 			<view class="info"><view class="live-line"><text class="badge" :class="{ living: detail!.session.status == 'living' }">{{ statusText(detail!.session.status) }}</text><text v-if="detail!.session.status == 'living'" class="online">{{ detail!.session.online_count }} 人在线</text></view><text class="title">{{ detail!.session.title }}</text><text class="time">{{ timeRange }}</text><text v-if="detail!.play_urls != null && detail!.play_urls!.expires_at != null" class="expire">播放地址有效期至 {{ detail!.play_urls!.expires_at }}</text></view>

@@ -55,4 +55,18 @@
 		background-color: #F5F7FA;
 		padding-bottom: 76px;
 	}
+
+	.rc-button {
+		display: flex;
+		padding: 0 !important;
+		flex-direction: row;
+		align-items: center;
+		justify-content: center;
+		text-align: center;
+	}
+
+	.rc-button-hover {
+		opacity: 0.86;
+		transform: scale(0.98);
+	}
 </style>

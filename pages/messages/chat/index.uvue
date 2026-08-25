@@ -6,7 +6,6 @@
 
 		<scroll-view
 			class="messages"
-			scroll-y
 			:scroll-into-view="scrollTarget"
 			upper-threshold="30"
 			@scrolltoupper="loadOlder"
@@ -27,13 +26,13 @@
 				v-model="draft"
 				class="composer-input"
 				auto-height
-				maxlength="1000"
+				:maxlength="1000"
 				:disabled="!connected"
 				:placeholder="connected ? '输入消息...' : '聊天连接中...'"
 				confirm-type="send"
 				@confirm="send"
 			/>
-			<button class="send-button" :disabled="!connected || draft.trim() == ''" @click="send">发送</button>
+			<button class="rc-button send-button" hover-class="rc-button-hover" :hover-start-time="20" :hover-stay-time="120" :disabled="!connected || draft.trim() == ''" @click="send">发送</button>
 		</view>
 	</view>
 </template>

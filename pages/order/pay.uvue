@@ -1,0 +1,93 @@
+<template>
+	<view class="page">
+		<RcNavBar title="订单支付" :show-back="true" />
+		<scroll-view class="content">
+			<view v-if="loading" class="state"><text class="state-text">正在加载订单...</text></view>
+			<view v-else-if="order == null" class="state"><text class="state-title">订单加载失败</text><text class="state-text">{{ errorText }}</text><button class="rc-button retry" hover-class="rc-button-hover" :hover-start-time="20" :hover-stay-time="120" @click="load">重新加载</button></view>
+			<view v-else>
+				<view :class="resultClass"><text class="result-title">{{ statusText(order!.status) }}</text><text class="result-subtitle">订单号 {{ order!.order_no }}</text></view>
+				<view class="card"><text class="card-title">订单信息</text><view class="row"><text class="label">培训项目</text><text class="value">{{ order!.title }}</text></view><view class="row"><text class="label">订单金额</text><text class="amount">¥{{ order!.amount }}</text></view><view class="row"><text class="label">实付金额</text><text class="value">¥{{ order!.paid_amount }}</text></view><view class="row"><text class="label">创建时间</text><text class="value">{{ dateText(order!.created_at) }}</text></view><view class="row"><text class="label">过期时间</text><text class="value">{{ dateText(order!.expired_at) }}</text></view></view>
+				<view v-if="order!.status == 'pending'" class="card"><text class="card-title">支付方式</text><view class="channel-row"><view v-for="item in channels" :key="item.value" :class="channelClass(item.value)" hover-class="channel-hover" :hover-start-time="20" :hover-stay-time="120" @click="selectedChannel = item.value"><text class="channel-name">{{ item.label }}</text><text class="channel-desc">{{ item.desc }}</text></view></view><text class="tip">当前后端文档默认支持 mock 渠道自动确认；微信/支付宝需服务端商户配置完成后使用。</text></view>
+				<view v-if="payMessage != ''" class="message-card"><text class="message-text">{{ payMessage }}</text></view>
+			</view>
+		</scroll-view>
+		<view v-if="order != null" class="action-bar"><button v-if="order!.status == 'pending'" class="rc-button pay-button" hover-class="rc-button-hover" :hover-start-time="20" :hover-stay-time="120" :loading="paying" :disabled="paying" @click="pay">确认支付</button><button v-else class="rc-button pay-button" hover-class="rc-button-hover" :hover-start-time="20" :hover-stay-time="120" @click="backToTraining">返回培训详情</button></view>
+	</view>
+</template>
+
+<script setup lang="uts">
+	import { getOrder, payOrder } from '../../api/classroom.uts'
+	import RcNavBar from '../../components/RcNavBar.uvue'
+	import type { ClassroomOrder } from '../../types/classroom.uts'
+
+	type PayChannel = { label : string, value : string, desc : string }
+	const channels : PayChannel[] = [
+		{ label: '模拟支付', value: 'mock', desc: '开发环境自动确认' },
+		{ label: '微信支付', value: 'wechat', desc: '需商户配置' },
+		{ label: '支付宝', value: 'alipay', desc: '需商户配置' }
+	]
+	const orderNo = ref('')
+	const trainingSlug = ref('')
+	const order = ref<ClassroomOrder | null>(null)
+	const loading = ref(true)
+	const paying = ref(false)
+	const selectedChannel = ref('mock')
+	const errorText = ref('请稍后重试')
+	const payMessage = ref('')
+
+	const resultClass = computed(() : string => order.value != null && order.value!.status == 'paid' ? 'result-card paid' : 'result-card')
+
+	onLoad((options : UTSJSONObject | null) => { const no = options == null ? null : (options['orderNo'] as string | null); const slug = options == null ? null : (options['trainingSlug'] as string | null); orderNo.value = no == null ? '' : no; trainingSlug.value = slug == null ? '' : decodeURIComponent(slug); load() })
+
+	function load() {
+		if (orderNo.value == '') { loading.value = false; order.value = null; errorText.value = '订单参数无效'; return }
+		loading.value = true
+		getOrder(orderNo.value).then((data) => { order.value = data; loading.value = false }).catch((error : any | null) => { order.value = null; loading.value = false; errorText.value = errorMessage(error, '订单加载失败') })
+	}
+
+	function pay() {
+		if (order.value == null || paying.value) return
+		paying.value = true
+		payMessage.value = ''
+		payOrder(order.value!.order_no, selectedChannel.value).then((result) => {
+			payMessage.value = result.pay.message
+			getOrder(orderNo.value).then((data) => { order.value = data; paying.value = false; if (data.status == 'paid') uni.showToast({ title: '支付成功', icon: 'success' }) }).catch(() => { order.value = result.order; paying.value = false })
+		}).catch((error : any | null) => { paying.value = false; payMessage.value = errorMessage(error, '支付失败，请稍后重试') })
+	}
+
+	function backToTraining() { if (trainingSlug.value != '') { uni.redirectTo({ url: `/pages/training/detail?slug=${encodeURIComponent(trainingSlug.value)}` }); return }; uni.navigateBack() }
+	function channelClass(value : string) : string { return selectedChannel.value == value ? 'channel channel-selected' : 'channel' }
+	function errorMessage(error : any | null, fallback : string) : string { if (error == null) return fallback; const cause = error as Error; return cause.message == '' ? fallback : cause.message }
+	function statusText(value : string) : string { if (value == 'paid') return '支付成功'; if (value == 'cancelled') return '订单已取消'; if (value == 'failed') return '支付失败'; if (value == 'refunded') return '已退款'; return '待支付' }
+	function dateText(value : string | null) : string { return value == null || value == '' ? '未生成' : value.replace('T', ' ').substring(0, 16) }
+</script>
+
+<style scoped>
+	.page{flex:1;background:#F5F7FA}
+	.content{flex:1;padding:14px 16px 92px}
+	.state{padding:100px 24px;align-items:center}
+	.state-title{font-size:18px;font-weight:700;color:#263b34}
+	.state-text{margin-top:8px;font-size:12px;color:#829089;text-align:center}
+	.retry{margin-top:18px;width:140px;height:42px;border-radius:21px;background:#0F62FE;color:#fff;font-size:13px}
+	.result-card{padding:24px 18px;border-radius:15px;background:#203040}
+	.paid{background:#0F62FE}
+	.result-title{color:#fff;font-size:22px;font-weight:700}
+	.result-subtitle{margin-top:8px;color:#d9e5f7;font-size:11px}
+	.card{margin-top:14px;padding:17px;border-radius:15px;background:#fff}
+	.card-title{font-size:17px;font-weight:700;color:#263b34}
+	.row{min-height:42px;flex-direction:row;align-items:center;justify-content:space-between;border-bottom:1px solid #eef1f5}
+	.label{font-size:12px;color:#7b8782}
+	.value{max-width:210px;text-align:right;font-size:12px;color:#263b34}
+	.amount{color:#FFA500;font-size:17px;font-weight:700}
+	.channel-row{margin-top:13px}
+	.channel{margin-bottom:10px;padding:13px;border-radius:12px;background:#F5F7FA;border:1px solid #F5F7FA}
+	.channel-selected{background:#E8F0FE;border-color:#0F62FE}
+	.channel-hover{opacity:.86}
+	.channel-name{font-size:14px;font-weight:700;color:#263b34}
+	.channel-desc{margin-top:5px;font-size:11px;color:#7b8782}
+	.tip{margin-top:4px;font-size:10px;color:#98a29e;line-height:16px}
+	.message-card{margin-top:14px;padding:13px;border-radius:12px;background:#FFF7E8}
+	.message-text{font-size:12px;color:#9a6200}
+	.action-bar{position:fixed;left:0;right:0;bottom:0;padding:12px 16px;background:#fff;border-top:1px solid #eef1f5}
+	.pay-button{height:46px;border-radius:23px;background:#0F62FE;color:#fff;font-size:15px;font-weight:700}
+</style>

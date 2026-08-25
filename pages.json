@@ -13,6 +13,18 @@
       }
     },
     {
+      "path": "pages/training/index",
+      "style": { "navigationStyle": "custom" }
+    },
+    {
+      "path": "pages/training/detail",
+      "style": { "navigationStyle": "custom" }
+    },
+    {
+      "path": "pages/order/pay",
+      "style": { "navigationStyle": "custom" }
+    },
+    {
       "path": "pages/profile/index",
       "style": { "navigationStyle": "custom" }
     },
@@ -43,7 +55,9 @@
     "navigationBarTextStyle": "black",
     "navigationBarTitleText": "中测培训",
     "navigationBarBackgroundColor": "#FFFFFF",
-    "backgroundColor": "#F6F7F9"
+    "backgroundColor": "#F6F7F9",
+    "animationType": "slide-in-right",
+    "animationDuration": 260
   },
   "uniIdRouter": {}
 }

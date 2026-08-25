@@ -1,10 +1,20 @@
 export type TeacherSummary = { id : number, name : string, title : string | null, avatar : string | null }
 export type CourseSummary = { id : number, title : string, subtitle : string | null, cover : string | null, summary : string | null, is_free : boolean, price : string, duration_minutes : number, lesson_count : number, teacher : TeacherSummary | null }
-export type TrainingSummary = { id : number, title : string, cover : string | null, summary : string | null, type : string, location : string | null, start_at : string | null, is_free : boolean, price : string, enroll_count : number }
+export type TrainingCategory = { id : number, name : string, slug : string }
+export type TrainingTeacher = { id : number, name : string, title : string | null, avatar : string | null, organization : string | null, expertise : string | null }
+export type TrainingCourse = { id : number, title : string, slug : string, cover : string | null, type : string, is_free : boolean, price : string, lesson_count : number, teacher : TrainingTeacher | null }
+export type TrainingSummary = { id : number, title : string, subtitle : string | null, slug : string, cover : string | null, summary : string | null, type : string, status : string, location : string | null, start_at : string | null, end_at : string | null, enroll_start_at : string | null, enroll_end_at : string | null, max_students : number | null, is_free : boolean, price : string, is_featured : boolean, enroll_count : number, category : TrainingCategory | null }
+export type TrainingDetail = { id : number, title : string, subtitle : string | null, slug : string, cover : string | null, summary : string | null, description : string | null, type : string, status : string, location : string | null, start_at : string | null, end_at : string | null, enroll_start_at : string | null, enroll_end_at : string | null, max_students : number | null, enroll_count : number, is_free : boolean, price : string, is_featured : boolean, view_count : number, enrolled : boolean, category : TrainingCategory | null, teachers : TrainingTeacher[], courses : TrainingCourse[] }
+export type TrainingPage = { current_page : number, data : TrainingSummary[], per_page : number, total : number, last_page : number }
 export type BannerSummary = { id : number, title : string, subtitle : string | null, cover : string | null, summary : string | null, external_url : string | null }
 export type ClassroomHome = { banners : BannerSummary[], featured_trainings : TrainingSummary[], latest_trainings : TrainingSummary[], featured_courses : CourseSummary[] }
 export type CourseEnrollment = { id : number, status : string, source : string, progress : number, last_learned_at : string | null, course : CourseSummary | null }
 export type CoursePage = { current_page : number, data : CourseEnrollment[], per_page : number, total : number, last_page : number }
+
+export type ClassroomOrder = { id : number, order_no : string, title : string, amount : string, paid_amount : string, status : string, channel : string | null, trade_no : string | null, payable_type : string, payable_id : number, paid_at : string | null, expired_at : string | null, created_at : string | null, pay_payload : any | null }
+export type CreateOrderResult = { order : ClassroomOrder, paid : boolean }
+export type PaySummary = { channel : string, status : string, message : string }
+export type PayOrderResult = { order : ClassroomOrder, pay : PaySummary }
 
 export type LessonProgress = { status : string, progress_seconds : number, progress : number, started_at : string | null, last_learned_at : string | null, completed_at : string | null }
 export type LiveSessionSummary = { id : number, title : string, status : string, scheduled_start_at : string | null, scheduled_end_at : string | null, online_count : number }

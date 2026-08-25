@@ -1,9 +1,9 @@
 <template>
 	<view class="page"><RcNavBar title="学习" /><view class="header"><text class="title">学习中心</text><text class="subtitle">把每一次学习，都变成成长</text></view>
 		<view class="tabs"><text v-for="item in tabs" :key="item.value" class="tab" :class="{ active: status == item.value }" @click="selectStatus(item.value)">{{ item.label }}</text></view>
-		<scroll-view class="list" scroll-y refresher-enabled :refresher-triggered="refreshing" @refresherrefresh="refresh">
+		<scroll-view class="list" refresher-enabled :refresher-triggered="refreshing" @refresherrefresh="refresh">
 			<view v-if="loading" class="state"><text>正在加载课程...</text></view>
-			<view v-else-if="!loggedIn" class="empty"><text class="empty-icon">▷</text><text class="empty-title">登录后开始学习</text><text class="empty-copy">课程进度将在多个设备间同步</text><button class="primary" @click="goLogin">立即登录</button></view>
+			<view v-else-if="!loggedIn" class="empty"><text class="empty-icon">▷</text><text class="empty-title">登录后开始学习</text><text class="empty-copy">课程进度将在多个设备间同步</text><button class="rc-button primary" hover-class="rc-button-hover" :hover-start-time="20" :hover-stay-time="120" @click="goLogin">立即登录</button></view>
 			<view v-else-if="courses.length == 0" class="empty"><text class="empty-icon">◇</text><text class="empty-title">暂无相关课程</text><text class="empty-copy">报名课程或参加培训后，课程会出现在这里</text></view>
 			<view v-else class="course-list"><view v-for="item in courses" :key="item.id" class="course-card" @click="openCourse(item)"><image v-if="item.course != null && item.course!.cover != null" class="cover" :src="item.course!.cover!" mode="aspectFill" /><view v-else class="cover cover-empty"><text>课程</text></view><view class="body"><text class="course-title">{{ item.course == null ? '课程已下架' : item.course!.title }}</text><text class="meta">{{ statusName(item.status) }} · {{ item.course == null ? 0 : item.course!.lesson_count }} 课时</text><view class="progress-track"><view class="progress-value" :style="{ width: item.progress + '%' }" /></view><view class="progress-line"><text class="progress-text">已学 {{ item.progress }}%</text><text class="continue">{{ item.progress >= 100 ? '查看课程 ›' : '继续学习 ›' }}</text></view></view></view></view>
 			<view class="bottom-space" />

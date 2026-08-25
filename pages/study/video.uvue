@@ -2,11 +2,11 @@
 	<view class="page">
 		<RcNavBar title="视频课程" :show-back="true" />
 		<view v-if="loading" class="state"><text>正在加载视频课时...</text></view>
-		<view v-else-if="lesson == null" class="state"><text>{{ errorText }}</text><button class="retry" @click="load">重新加载</button></view>
-		<scroll-view v-else class="content" scroll-y>
+		<view v-else-if="lesson == null" class="state"><text>{{ errorText }}</text><button class="rc-button retry" hover-class="rc-button-hover" :hover-start-time="20" :hover-stay-time="120" @click="load">重新加载</button></view>
+		<scroll-view v-else class="content">
 			<view class="player">
 				<video v-if="playUrl != ''" id="lesson-video" class="video" :src="playUrl" controls autoplay @loadedmetadata="resumeVideo" @timeupdate="onTimeUpdate" @pause="onPause" @ended="onEnded" />
-				<view v-else-if="playAuth != null" class="cloud-player"><text class="cloud-icon">▶</text><text class="cloud-title">{{ providerName(playAuth!.provider) }}点播凭证已获取</text><text class="cloud-copy">视频采用云点播加密播放，需要对应播放器组件加载</text><text class="cloud-expire">凭证有效期 {{ playAuth!.expires_in }} 秒</text><button class="refresh-auth" @click="loadPlayAuth">刷新播放凭证</button></view>
+				<view v-else-if="playAuth != null" class="cloud-player"><text class="cloud-icon">▶</text><text class="cloud-title">{{ providerName(playAuth!.provider) }}点播凭证已获取</text><text class="cloud-copy">视频采用云点播加密播放，需要对应播放器组件加载</text><text class="cloud-expire">凭证有效期 {{ playAuth!.expires_in }} 秒</text><button class="rc-button refresh-auth" hover-class="rc-button-hover" :hover-start-time="20" :hover-stay-time="120" @click="loadPlayAuth">刷新播放凭证</button></view>
 				<view v-else class="cloud-player"><text class="cloud-title">暂无可用播放地址</text><text class="cloud-copy">请稍后重试或联系课程管理员</text></view>
 			</view>
 

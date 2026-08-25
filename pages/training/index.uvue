@@ -1,0 +1,75 @@
+<template>
+	<view class="page">
+		<RcNavBar title="培训报名" :show-back="true" />
+		<scroll-view class="list" refresher-enabled :refresher-triggered="refreshing" @refresherrefresh="refresh">
+			<view class="header"><text class="title">精选培训</text><text class="subtitle">选择适合你的培训计划</text></view>
+			<view v-if="loading" class="state"><text class="state-text">正在加载培训...</text></view>
+			<view v-else-if="trainings.length == 0" class="state"><text class="state-title">暂无可报名培训</text><text class="state-text">新的培训计划会在这里更新</text></view>
+			<view v-else class="cards">
+				<view v-for="item in trainings" :key="item.id" class="training-card" hover-class="training-card-hover" :hover-start-time="20" :hover-stay-time="120" @click="openTraining(item)">
+					<image v-if="item.cover != null" class="cover" :src="item.cover!" mode="aspectFill" />
+					<view v-else class="cover cover-empty"><text class="cover-empty-text">培训</text></view>
+					<view class="card-body"><view class="card-top"><text class="tag">{{ typeText(item.type) }}</text><text class="price">{{ priceText(item) }}</text></view><text class="card-title">{{ item.title }}</text><text class="summary">{{ item.summary == null ? '暂无培训简介' : item.summary! }}</text><view class="meta-row"><text class="meta">{{ item.location == null ? '线上培训' : item.location! }}</text><text class="meta">{{ dateText(item.start_at) }}</text></view></view>
+				</view>
+			</view>
+			<view class="bottom-space" />
+		</scroll-view>
+	</view>
+</template>
+
+<script setup lang="uts">
+	import { getTrainings } from '../../api/classroom.uts'
+	import RcNavBar from '../../components/RcNavBar.uvue'
+	import type { TrainingSummary } from '../../types/classroom.uts'
+
+	const trainings = ref<TrainingSummary[]>([])
+	const loading = ref(true)
+	const refreshing = ref(false)
+
+	onLoad(() => load())
+
+	function load() {
+		loading.value = true
+		getTrainings().then((page) => {
+			trainings.value = page.data
+			loading.value = false
+			refreshing.value = false
+		}).catch(() => {
+			loading.value = false
+			refreshing.value = false
+			uni.showToast({ title: '培训加载失败', icon: 'none' })
+		})
+	}
+
+	function refresh() { refreshing.value = true; load() }
+	function openTraining(item : TrainingSummary) { uni.navigateTo({ url: `/pages/training/detail?slug=${encodeURIComponent(item.slug)}` }) }
+	function typeText(value : string) : string { if (value == 'offline') return '线下'; if (value == 'mixed') return '混合'; return '线上' }
+	function priceText(item : TrainingSummary) : string { return item.is_free || item.price == '0.00' ? '免费' : `¥${item.price}` }
+	function dateText(value : string | null) : string { return value == null || value.length < 10 ? '时间待定' : value.substring(0, 10) }
+</script>
+
+<style scoped>
+	.page{flex:1;background:#F5F7FA}
+	.list{flex:1}
+	.header{padding:24px 20px 14px;background:#fff}
+	.title{font-size:24px;font-weight:700;color:#172d26}
+	.subtitle{margin-top:7px;font-size:12px;color:#7b8984}
+	.state{padding:90px 24px;align-items:center}
+	.state-title{font-size:18px;font-weight:700;color:#263b34}
+	.state-text{margin-top:8px;font-size:12px;color:#87928e;text-align:center}
+	.cards{padding:14px 16px}
+	.training-card{margin-bottom:14px;border-radius:15px;background:#fff;overflow:hidden}
+	.training-card-hover{opacity:.88;transform:scale(.98)}
+	.cover{width:100%;height:148px;background:#E8F0FE}
+	.cover-empty{align-items:center;justify-content:center}
+	.cover-empty-text{color:#0F62FE;font-size:16px;font-weight:700}
+	.card-body{padding:14px}
+	.card-top{flex-direction:row;align-items:center;justify-content:space-between}
+	.tag{padding:4px 9px;border-radius:10px;background:#E8F0FE;color:#0F62FE;font-size:10px}
+	.price{color:#FFA500;font-size:16px;font-weight:700}
+	.card-title{margin-top:10px;font-size:17px;font-weight:700;color:#1d2e28}
+	.summary{margin-top:7px;font-size:12px;color:#6f7d77;line-height:18px}
+	.meta-row{margin-top:12px;flex-direction:row;justify-content:space-between}
+	.meta{font-size:11px;color:#89938f}
+	.bottom-space{height:24px}
+</style>

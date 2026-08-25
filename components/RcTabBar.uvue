@@ -4,10 +4,10 @@
 			v-for="item in items"
 			:key="item.path"
 			class="tab-item"
-			:class="{ pressed: pressedPath == item.path }"
-			@touchstart="press(item.path)"
-			@touchend="release"
-			@touchcancel="release"
+			:class="{ 'tab-item-active': currentPath == item.path, 'tab-item-switching': switchingPath == item.path }"
+			hover-class="tab-item-hover"
+			:hover-start-time="20"
+			:hover-stay-time="120"
 			@click="go(item.path)"
 		>
 			<text class="tab-icon" :class="{ active: currentPath == item.path }">{{ item.icon }}</text>
@@ -17,6 +17,8 @@
 </template>
 
 <script setup lang="uts">
+	import { navigateRootPage } from '../utils/navigation.uts'
+
 	type TabItem = {
 		label : string
 		icon : string
@@ -35,22 +37,15 @@
 		{ label: '学习', icon: '▷', path: '/pages/study/index' },
 		{ label: '我的', icon: '○', path: '/pages/profile/index' }
 	]
-	const pressedPath = ref('')
+	const switchingPath = ref('')
 	let navigating = false
-	function press(path : string) { pressedPath.value = path }
-	function release() { pressedPath.value = '' }
 
 	function go(path : string) {
 		if (path == props.currentPath) return
 		if (navigating) return
 		navigating = true
-		uni.redirectTo({
-			url: path,
-			fail: () => {},
-			complete: () => {
-				setTimeout(() => { navigating = false }, 300)
-			}
-		})
+		switchingPath.value = path
+		setTimeout(() => { navigateRootPage(path); setTimeout(() => { navigating = false; switchingPath.value = '' }, 240) }, 70)
 	}
 </script>
 
@@ -70,15 +65,27 @@
 
 	.tab-item {
 		flex: 1;
+		height: 48px;
+		margin: 5px 8px;
+		border-radius: 14px;
 		align-items: center;
 		justify-content: center;
-		transition-property: transform, opacity;
-		transition-duration: 120ms;
 	}
 
-	.pressed, .tab-item:active {
-		transform: scale(0.9);
-		opacity: 0.68;
+	.tab-item-active {
+		background-color: #F6F9FF;
+	}
+
+	.tab-item-hover {
+		background-color: #EAF1FF;
+		transform: scale(0.97);
+		opacity: 0.9;
+	}
+
+	.tab-item-switching {
+		background-color: #EAF1FF;
+		transform: scale(0.97);
+		opacity: 0.9;
 	}
 
 	.tab-icon {

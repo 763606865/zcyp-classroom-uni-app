@@ -9,13 +9,13 @@
 				<view class="city-button"><text class="city-button-text">{{ cityLabels[cityIndex] }}⌄</text></view>
 			</picker>
 		</view>
-		<scroll-view class="content" scroll-y refresher-enabled :refresher-triggered="refreshing"
+		<scroll-view class="content" refresher-enabled :refresher-triggered="refreshing"
 			@refresherrefresh="refresh" @scrolltolower="loadMore">
 			<view v-if="loading && jobs.length == 0" class="state"><text class="state-text">正在匹配好职位...</text></view>
 			<view v-else-if="jobs.length == 0" class="empty">
 				<text class="empty-title">暂时没有合适职位</text>
 				<text class="empty-desc">换个城市试试，新的职位会持续更新</text>
-				<button class="retry" @click="refresh">重新加载</button>
+				<button class="rc-button retry" hover-class="rc-button-hover" :hover-start-time="20" :hover-stay-time="120" @click="refresh">重新加载</button>
 			</view>
 			<view v-else class="list">
 				<JobCard v-for="item in jobs" :key="item.id" :item="item" />

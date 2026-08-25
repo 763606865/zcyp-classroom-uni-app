@@ -1,0 +1,112 @@
+<template>
+	<view class="page">
+		<RcNavBar title="培训详情" :show-back="true" />
+		<scroll-view class="content">
+			<view v-if="loading" class="state"><text class="state-text">正在加载培训详情...</text></view>
+			<view v-else-if="detail == null" class="state"><text class="state-title">培训加载失败</text><text class="state-text">{{ errorText }}</text><button class="rc-button retry" hover-class="rc-button-hover" :hover-start-time="20" :hover-stay-time="120" @click="load">重新加载</button></view>
+			<view v-else>
+				<view class="hero"><image v-if="detail!.cover != null" class="hero-image" :src="detail!.cover!" mode="aspectFill" /><view v-else class="hero-image hero-empty"><text class="hero-empty-text">培训</text></view><view class="hero-shade"><text class="hero-title">{{ detail!.title }}</text><text class="hero-meta">{{ typeText(detail!.type) }} · {{ detail!.location == null ? '线上培训' : detail!.location! }}</text></view></view>
+				<view class="info-card"><view class="price-row"><text class="price">{{ priceText }}</text><text class="status">{{ detail!.enrolled ? '已报名' : '开放报名' }}</text></view><text class="summary">{{ detail!.summary == null ? '暂无培训简介' : detail!.summary! }}</text><view class="stats"><view class="stat-item"><text class="stat-num">{{ detail!.enroll_count }}</text><text class="stat-label">已报名</text></view><view class="stat-item"><text class="stat-num">{{ maxStudentsText }}</text><text class="stat-label">名额</text></view><view class="stat-item"><text class="stat-num">{{ detail!.view_count }}</text><text class="stat-label">浏览</text></view></view></view>
+				<view class="section"><text class="section-title">培训时间</text><text class="section-text">{{ rangeText(detail!.start_at, detail!.end_at) }}</text><text class="section-subtext">报名时间：{{ rangeText(detail!.enroll_start_at, detail!.enroll_end_at) }}</text></view>
+				<view v-if="detail!.teachers.length > 0" class="section"><text class="section-title">讲师团队</text><view v-for="teacher in detail!.teachers" :key="teacher.id" class="teacher-row"><image v-if="teacher.avatar != null" class="teacher-avatar" :src="teacher.avatar!" mode="aspectFill" /><view v-else class="teacher-avatar teacher-avatar-empty"><text class="teacher-avatar-text">师</text></view><view class="teacher-body"><text class="teacher-name">{{ teacher.name }}</text><text class="teacher-title">{{ teacher.title == null ? '培训讲师' : teacher.title! }}</text><text v-if="teacher.expertise != null" class="teacher-desc">{{ teacher.expertise! }}</text></view></view></view>
+				<view v-if="detail!.courses.length > 0" class="section"><text class="section-title">关联课程</text><view v-for="course in detail!.courses" :key="course.id" class="course-row" hover-class="course-row-hover" :hover-start-time="20" :hover-stay-time="120" @click="openCourse(course.id)"><view class="course-main"><text class="course-title">{{ course.title }}</text><text class="course-meta">{{ course.lesson_count }} 课时 · {{ course.teacher == null ? '专业讲师' : course.teacher!.name }}</text></view><text class="course-status">{{ detail!.enrolled ? '学习 ›' : '报名后学习' }}</text></view></view>
+				<view class="section"><text class="section-title">培训详情</text><rich-text class="rich" mode="native" :nodes="descriptionHtml"></rich-text></view>
+				<view class="bottom-space" />
+			</view>
+		</scroll-view>
+		<view v-if="detail != null" class="action-bar"><view class="action-price"><text class="action-price-label">报名费用</text><text class="action-price-value">{{ priceText }}</text></view><button class="rc-button enroll-button" hover-class="rc-button-hover" :hover-start-time="20" :hover-stay-time="120" :disabled="submitting || detail!.enrolled" :loading="submitting" @click="submitOrder">{{ actionText }}</button></view>
+	</view>
+</template>
+
+<script setup lang="uts">
+	import { createTrainingOrder, getTrainingDetail } from '../../api/classroom.uts'
+	import RcNavBar from '../../components/RcNavBar.uvue'
+	import { isLoggedIn } from '../../stores/auth.uts'
+	import type { TrainingDetail } from '../../types/classroom.uts'
+
+	const slug = ref('')
+	const detail = ref<TrainingDetail | null>(null)
+	const loading = ref(true)
+	const submitting = ref(false)
+	const errorText = ref('请稍后重试')
+	const descriptionHtml = computed(() : string => detail.value == null || detail.value!.description == null || detail.value!.description == '' ? '<p>暂无培训详情</p>' : detail.value!.description!)
+	const priceText = computed(() : string => detail.value == null ? '' : (detail.value!.is_free || detail.value!.price == '0.00' ? '免费' : `¥${detail.value!.price}`))
+	const maxStudentsText = computed(() : string => detail.value == null || detail.value!.max_students == null ? '不限' : `${detail.value!.max_students}`)
+	const actionText = computed(() : string => { if (detail.value == null) return '立即报名'; if (detail.value!.enrolled) return '已报名'; return detail.value!.is_free || detail.value!.price == '0.00' ? '免费报名' : '立即报名' })
+
+	onLoad((options : UTSJSONObject | null) => { const value = options == null ? null : (options['slug'] as string | null); slug.value = value == null ? '' : decodeURIComponent(value); load() })
+
+	function load() {
+		if (slug.value == '') { loading.value = false; detail.value = null; errorText.value = '培训参数无效'; return }
+		loading.value = true
+		getTrainingDetail(slug.value).then((data) => { detail.value = data; loading.value = false }).catch((error : any | null) => { detail.value = null; loading.value = false; errorText.value = errorMessage(error, '培训详情加载失败') })
+	}
+
+	function submitOrder() {
+		if (detail.value == null || submitting.value) return
+		if (!isLoggedIn()) { uni.navigateTo({ url: `/pages/auth/login?redirect=${encodeURIComponent('/pages/training/detail?slug=' + encodeURIComponent(slug.value))}` }); return }
+		submitting.value = true
+		const channel = detail.value!.is_free || detail.value!.price == '0.00' ? 'free' : 'auto'
+		createTrainingOrder(slug.value, channel).then((result) => {
+			submitting.value = false
+			if (result.paid || result.order.status == 'paid') { detail.value!.enrolled = true; uni.showToast({ title: '报名成功', icon: 'success' }); return }
+			uni.navigateTo({ url: `/pages/order/pay?orderNo=${result.order.order_no}&trainingSlug=${encodeURIComponent(slug.value)}` })
+		}).catch((error : any | null) => { submitting.value = false; uni.showToast({ title: errorMessage(error, '下单失败'), icon: 'none' }) })
+	}
+
+	function openCourse(courseId : number) { if (detail.value != null && detail.value!.enrolled) { uni.navigateTo({ url: `/pages/study/detail?id=${courseId}` }); return }; uni.showToast({ title: '报名后可学习课程', icon: 'none' }) }
+	function errorMessage(error : any | null, fallback : string) : string { if (error == null) return fallback; const cause = error as Error; return cause.message == '' ? fallback : cause.message }
+	function typeText(value : string) : string { if (value == 'offline') return '线下培训'; if (value == 'mixed') return '混合培训'; return '线上培训' }
+	function rangeText(start : string | null, end : string | null) : string { const s = dateText(start); const e = dateText(end); if (s == '待定' && e == '待定') return '时间待定'; return `${s} 至 ${e}` }
+	function dateText(value : string | null) : string { return value == null || value.length < 10 ? '待定' : value.substring(0, 10) }
+</script>
+
+<style scoped>
+	.page{flex:1;background:#F5F7FA}
+	.content{flex:1}
+	.state{padding:100px 24px;align-items:center}
+	.state-title{font-size:18px;font-weight:700;color:#263b34}
+	.state-text{margin-top:8px;font-size:12px;color:#829089;text-align:center}
+	.retry{margin-top:18px;width:140px;height:42px;border-radius:21px;background:#0F62FE;color:#fff;font-size:13px}
+	.hero{height:230px;background:#0F62FE}
+	.hero-image{width:100%;height:230px}
+	.hero-empty{align-items:center;justify-content:center}
+	.hero-empty-text{color:#fff;font-size:24px;font-weight:700}
+	.hero-shade{position:absolute;left:0;right:0;bottom:0;padding:54px 20px 20px;background:rgba(15,98,254,.72)}
+	.hero-title{color:#fff;font-size:22px;font-weight:700}
+	.hero-meta{margin-top:8px;color:#fff;font-size:12px}
+	.info-card{margin:14px 16px;padding:18px;border-radius:15px;background:#fff}
+	.price-row{flex-direction:row;align-items:center;justify-content:space-between}
+	.price{color:#FFA500;font-size:21px;font-weight:700}
+	.status{padding:5px 10px;border-radius:12px;background:#E8F0FE;color:#0F62FE;font-size:11px}
+	.summary{margin-top:12px;color:#5f6f69;font-size:13px;line-height:20px}
+	.stats{margin-top:16px;padding-top:14px;border-top:1px solid #eef1f5;flex-direction:row}
+	.stat-item{flex:1;align-items:center}
+	.stat-num{font-size:17px;font-weight:700;color:#20352d}
+	.stat-label{margin-top:5px;font-size:10px;color:#89938f}
+	.section{margin:0 16px 14px;padding:17px;border-radius:15px;background:#fff}
+	.section-title{font-size:17px;font-weight:700;color:#243a32}
+	.section-text{margin-top:12px;color:#344740;font-size:13px}
+	.section-subtext{margin-top:8px;color:#7f8b86;font-size:11px}
+	.teacher-row{margin-top:14px;flex-direction:row;align-items:center}
+	.teacher-avatar{width:46px;height:46px;border-radius:16px;background:#E8F0FE}
+	.teacher-avatar-empty{align-items:center;justify-content:center}
+	.teacher-avatar-text{font-size:13px;color:#0F62FE;font-weight:700}
+	.teacher-body{flex:1;margin-left:12px}
+	.teacher-name{font-size:15px;font-weight:700;color:#263b34}
+	.teacher-title{margin-top:4px;font-size:11px;color:#6c7a75}
+	.teacher-desc{margin-top:4px;font-size:10px;color:#98a29e}
+	.course-row{min-height:58px;margin-top:10px;padding:11px 0;flex-direction:row;align-items:center;border-bottom:1px solid #eef1f5}
+	.course-row-hover{opacity:.82}
+	.course-main{flex:1}
+	.course-title{font-size:14px;color:#263b34;font-weight:600}
+	.course-meta{margin-top:5px;font-size:10px;color:#87928e}
+	.course-status{font-size:11px;color:#0F62FE}
+	.rich{margin-top:12px;font-size:14px;color:#33443e;line-height:22px}
+	.bottom-space{height:96px}
+	.action-bar{position:fixed;left:0;right:0;bottom:0;padding:10px 16px 10px;background:#fff;border-top:1px solid #eef1f5;flex-direction:row;align-items:center}
+	.action-price{flex:1}
+	.action-price-label{font-size:10px;color:#8a9691}
+	.action-price-value{margin-top:2px;color:#FFA500;font-size:18px;font-weight:700}
+	.enroll-button{width:150px;height:44px;border-radius:22px;background:#0F62FE;color:#fff;font-size:15px;font-weight:700}
+</style>

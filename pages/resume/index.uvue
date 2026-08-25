@@ -1,12 +1,12 @@
 <template>
 	<view class="page">
-		<scroll-view class="content" scroll-y refresher-enabled :refresher-triggered="refreshing" @refresherrefresh="load">
+		<scroll-view class="content" refresher-enabled :refresher-triggered="refreshing" @refresherrefresh="load">
 			<view v-if="loading && resumes.length == 0" class="state"><text class="state-text">正在加载简历...</text></view>
 			<view v-else-if="resumes.length == 0" class="empty">
 				<text class="empty-icon-text">⌑</text>
 				<text class="empty-title">还没有在线简历</text>
 				<text class="empty-desc">完善简历，让招聘方更快了解你</text>
-				<button class="primary-button" @click="createNew">创建简历</button>
+				<button class="rc-button primary-button" hover-class="rc-button-hover" :hover-start-time="20" :hover-stay-time="120" @click="createNew">创建简历</button>
 			</view>
 			<view v-else class="resume-list">
 				<view v-for="item in resumes" :key="item.id" class="resume-card" @click="openDetail(item.id)">
@@ -33,7 +33,7 @@
 						<text class="updated">更新于 {{ formatDate(item.updated_at) }}</text>
 					</view>
 				</view>
-				<button class="outline-button" @click="createNew">＋ 新建另一份简历</button>
+				<button class="rc-button outline-button" hover-class="rc-button-hover" :hover-start-time="20" :hover-stay-time="120" @click="createNew">＋ 新建另一份简历</button>
 			</view>
 		</scroll-view>
 	</view>

@@ -1,36 +1,37 @@
 <template>
 	<RcNavBar title="个人资料" :show-back="true" />
-	<scroll-view class="page" scroll-y>
-		<view class="avatar-section"><view class="avatar"><image v-if="avatar != ''" class="avatar-image" :src="avatar" mode="aspectFill" /><text v-else>{{ initials }}</text></view><text class="avatar-tip">填写可公开访问的头像地址</text></view>
+	<scroll-view class="page">
+		<view class="avatar-section"><view class="avatar" hover-class="avatar-hover" :hover-start-time="20" :hover-stay-time="120" @click="chooseAvatar"><image v-if="avatar != ''" class="avatar-image" :src="avatar" mode="aspectFill" /><text v-else>{{ initials }}</text><view v-if="uploading" class="avatar-mask"><text class="avatar-mask-text">上传中</text></view></view><text class="avatar-tip">点击头像上传新图片</text></view>
 
 		<view class="card">
 			<text class="section-title">基本资料</text>
-			<text class="label">真实姓名</text><input v-model="realName" class="field" maxlength="255" placeholder="请输入真实姓名" />
-			<text class="label">昵称</text><input v-model="nickName" class="field" maxlength="50" placeholder="请输入昵称" />
+			<text class="label">真实姓名</text><input v-model="realName" class="field" :maxlength="255" placeholder="请输入真实姓名" />
+			<text class="label">昵称</text><input v-model="nickName" class="field" :maxlength="50" placeholder="请输入昵称" />
 			<text class="label">性别</text><picker :range="genderLabels" :value="gender" @change="changeGender"><view class="picker-field"><text>{{ genderLabels[gender] }}</text><text class="arrow">›</text></view></picker>
 			<text class="label">邮箱</text><input v-model="email" class="field" type="text" placeholder="请输入邮箱（选填）" />
-			<text class="label">头像地址</text><input v-model="avatar" class="field" type="text" placeholder="https://example.com/avatar.png" />
-			<button class="primary" :loading="saving" :disabled="saving" @click="save">保存资料</button>
+			<text class="label">头像地址</text><view class="avatar-row"><input v-model="avatar" class="field avatar-field" type="text" placeholder="上传后自动填入头像地址" /><button class="rc-button upload-button" hover-class="rc-button-hover" :hover-start-time="20" :hover-stay-time="120" :loading="uploading" :disabled="uploading" @click="chooseAvatar">上传</button></view>
+			<button class="rc-button primary" hover-class="rc-button-hover" :hover-start-time="20" :hover-stay-time="120" :loading="saving" :disabled="saving || uploading" @click="save">保存资料</button>
 		</view>
 
 		<view class="card">
 			<view class="phone-head"><view><text class="section-title">登录手机号</text><text class="current-phone">当前：{{ maskedCurrentPhone }}</text></view><text class="change-action" @click="changingPhone = !changingPhone">{{ changingPhone ? '取消修改' : '修改手机号' }}</text></view>
-			<view v-if="changingPhone" class="phone-form"><text class="label">新手机号</text><input v-model="newPhone" class="field" type="number" maxlength="11" placeholder="请输入新手机号" /><text class="label">短信验证码</text><view class="code-row"><input v-model="phoneCode" class="field code-field" type="number" maxlength="6" placeholder="6位验证码" /><button class="code-button" :disabled="sending || countdown > 0" @click="sendPhoneCode">{{ countdown > 0 ? countdown + 's' : '获取验证码' }}</button></view><button class="primary phone-button" :loading="changing" :disabled="changing" @click="confirmPhone">确认修改</button></view>
+			<view v-if="changingPhone" class="phone-form"><text class="label">新手机号</text><input v-model="newPhone" class="field" type="number" :maxlength="11" placeholder="请输入新手机号" /><text class="label">短信验证码</text><view class="code-row"><input v-model="phoneCode" class="field code-field" type="number" :maxlength="6" placeholder="6位验证码" /><button class="rc-button code-button" hover-class="rc-button-hover" :hover-start-time="20" :hover-stay-time="120" :disabled="sending || countdown > 0" @click="sendPhoneCode">{{ countdown > 0 ? countdown + 's' : '获取验证码' }}</button></view><button class="rc-button primary phone-button" hover-class="rc-button-hover" :hover-start-time="20" :hover-stay-time="120" :loading="changing" :disabled="changing" @click="confirmPhone">确认修改</button></view>
 		</view>
 
-		<button class="logout" @click="confirmLogout">退出登录</button>
+		<button class="rc-button logout" hover-class="rc-button-hover" :hover-start-time="20" :hover-stay-time="120" @click="confirmLogout">退出登录</button>
 		<view class="bottom-space" />
 	</scroll-view>
 </template>
 
 <script setup lang="uts">
 	import { changePhone, sendChangePhoneCode, updateProfile } from '../../api/auth.uts'
+	import { uploadAvatar } from '../../api/upload.uts'
 	import RcNavBar from '../../components/RcNavBar.uvue'
 	import { clearSession, getUser, setUser } from '../../stores/auth.uts'
 	import type { AuthUser, UpdateProfilePayload } from '../../types/auth.uts'
 	const genderLabels : string[] = ['未设置', '男', '女']
 	const user = ref<AuthUser | null>(null); const realName = ref(''); const nickName = ref(''); const email = ref(''); const avatar = ref(''); const gender = ref(0)
-	const saving = ref(false); const changingPhone = ref(false); const newPhone = ref(''); const phoneCode = ref(''); const sending = ref(false); const changing = ref(false); const countdown = ref(0)
+	const saving = ref(false); const uploading = ref(false); const changingPhone = ref(false); const newPhone = ref(''); const phoneCode = ref(''); const sending = ref(false); const changing = ref(false); const countdown = ref(0)
 	let timer : number | null = null
 	const initials = computed(() : string => { const text = realName.value != '' ? realName.value : nickName.value; return text == '' ? '中' : text.substring(0, 1) })
 	const maskedCurrentPhone = computed(() : string => { if (user.value == null || user.value!.phone.length != 11) return ''; const value = user.value!.phone; return value.substring(0, 3) + '****' + value.substring(7, 11) })
@@ -40,6 +41,7 @@
 	function nullable(value : string) : string | null { const text = value.trim(); return text == '' ? null : text }
 	function errorMessage(error : any | null, fallback : string) : string { if (error == null) return fallback; const cause = error as Error; return cause.message == '' ? fallback : cause.message }
 	function showError(message : string) { uni.showToast({ title:message, icon:'none' }) }
+	function chooseAvatar() { if (uploading.value) return; uni.chooseImage({ count: 1, sizeType: ['compressed'], sourceType: ['album', 'camera'], success: (result : ChooseImageSuccess) => { if (result.tempFilePaths.length == 0) return; uploading.value = true; uploadAvatar(result.tempFilePaths[0]).then((url) => { avatar.value = url; uploading.value = false; uni.showToast({ title:'头像已上传', icon:'success' }) }).catch((error : any | null) => { uploading.value = false; showError(errorMessage(error, '头像上传失败')) }) }, fail: () => {} }) }
 	function changeGender(event : UTSJSONObject) { const detail = event['detail'] as UTSJSONObject | null; if (detail == null) return; const value = detail!['value'] as string; gender.value = parseInt(value) }
 	function validEmail() : boolean { return email.value.trim() == '' || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.value.trim()) }
 	function save() { if (!validEmail()) { showError('请输入正确的邮箱'); return }; saving.value = true; const payload : UpdateProfilePayload = { real_name:nullable(realName.value), nick_name:nullable(nickName.value), avatar:nullable(avatar.value), gender:gender.value, email:nullable(email.value.toLowerCase()) }; updateProfile(payload).then((result) => { setUser(result.user); user.value = result.user; hydrateForm(); uni.showToast({ title:result.message, icon:'success' }); saving.value = false }).catch((error : any | null) => { showError(errorMessage(error, '资料保存失败')); saving.value = false }) }
@@ -50,6 +52,6 @@
 </script>
 
 <style scoped>
-	.page{flex:1;background:#f4f7f5}.avatar-section{padding:28px 20px 20px;align-items:center;background:#123f34}.avatar{width:78px;height:78px;border-radius:26px;background:#e1f1ea;color:#176b52;font-size:25px;font-weight:700;align-items:center;justify-content:center;overflow:hidden}.avatar-image{width:78px;height:78px}.avatar-tip{margin-top:10px;color:#abc6bc;font-size:11px}.card{margin:14px 16px;padding:18px;border-radius:16px;background:#fff}.section-title{color:#263b33;font-size:17px;font-weight:700}.label{margin:17px 0 8px;color:#53635d;font-size:12px}.field,.picker-field{height:46px;padding:0 13px;border-radius:10px;background:#f4f7f5;font-size:14px;color:#30423b}.picker-field{flex-direction:row;align-items:center;justify-content:space-between}.arrow{color:#9ba5a1;font-size:20px}.primary{margin-top:24px;height:46px;line-height:46px;border-radius:12px;background:#176b52;color:#fff;font-size:15px}.phone-head{flex-direction:row;align-items:center;justify-content:space-between}.current-phone{margin-top:6px;color:#89948f;font-size:11px}.change-action{color:#176b52;font-size:12px}.phone-form{margin-top:6px}.code-row{flex-direction:row}.code-field{flex:1}.code-button{width:118px;height:46px;margin-left:10px;padding:0;line-height:46px;border-radius:10px;background:#e8f2ee;color:#176b52;font-size:12px}.phone-button{margin-top:20px}.logout{margin:22px 16px 0;height:46px;line-height:46px;border-radius:12px;background:#fff;color:#c14f45;font-size:14px}.bottom-space{height:35px}
-	.page{background:#F5F7FA}.avatar-section{background:#0F62FE}.avatar{background:#fff;color:#0F62FE}.avatar-tip{color:#fff}.field,.picker-field{background:#F5F7FA}.primary{background:#0F62FE}.change-action{color:#0F62FE}.code-button{background:#E8F0FE;color:#0F62FE}
+	.page{flex:1;background:#f4f7f5}.avatar-section{padding:28px 20px 20px;align-items:center;background:#123f34}.avatar{width:78px;height:78px;border-radius:26px;background:#e1f1ea;color:#176b52;font-size:25px;font-weight:700;align-items:center;justify-content:center;overflow:hidden}.avatar-hover{opacity:.86;transform:scale(.96)}.avatar-image{width:78px;height:78px}.avatar-mask{position:absolute;left:0;right:0;top:0;bottom:0;align-items:center;justify-content:center;background:rgba(0,0,0,.42)}.avatar-mask-text{color:#fff;font-size:11px}.avatar-tip{margin-top:10px;color:#abc6bc;font-size:11px}.card{margin:14px 16px;padding:18px;border-radius:16px;background:#fff}.section-title{color:#263b33;font-size:17px;font-weight:700}.label{margin:17px 0 8px;color:#53635d;font-size:12px}.field,.picker-field{height:46px;padding:0 13px;border-radius:10px;background:#f4f7f5;font-size:14px;color:#30423b}.picker-field{flex-direction:row;align-items:center;justify-content:space-between}.avatar-row{flex-direction:row}.avatar-field{flex:1}.upload-button{width:74px;height:46px;margin-left:10px;line-height:46px;border-radius:10px;background:#E8F0FE;color:#176b52;font-size:12px}.arrow{color:#9ba5a1;font-size:20px}.primary{margin-top:24px;height:46px;line-height:46px;border-radius:12px;background:#176b52;color:#fff;font-size:15px}.phone-head{flex-direction:row;align-items:center;justify-content:space-between}.current-phone{margin-top:6px;color:#89948f;font-size:11px}.change-action{color:#176b52;font-size:12px}.phone-form{margin-top:6px}.code-row{flex-direction:row}.code-field{flex:1}.code-button{width:118px;height:46px;margin-left:10px;padding:0;line-height:46px;border-radius:10px;background:#e8f2ee;color:#176b52;font-size:12px}.phone-button{margin-top:20px}.logout{margin:22px 16px 0;height:46px;line-height:46px;border-radius:12px;background:#fff;color:#c14f45;font-size:14px}.bottom-space{height:35px}
+	.page{background:#F5F7FA}.avatar-section{background:#0F62FE}.avatar{background:#fff;color:#0F62FE}.avatar-tip{color:#fff}.field,.picker-field{background:#F5F7FA}.primary{background:#0F62FE}.change-action{color:#0F62FE}.code-button,.upload-button{background:#E8F0FE;color:#0F62FE}
 </style>

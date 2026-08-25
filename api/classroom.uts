@@ -1,8 +1,28 @@
 import { request } from '../services/http.uts'
-import type { ClassroomHome, CourseComments, CourseInteractions, CoursePage, CourseProgressDetail, CourseProgressUpdate, LiveSessionDetail, VodPlayAuth } from '../types/classroom.uts'
+import type { ClassroomHome, ClassroomOrder, CourseComments, CourseInteractions, CoursePage, CourseProgressDetail, CourseProgressUpdate, CreateOrderResult, LiveSessionDetail, PayOrderResult, TrainingDetail, TrainingPage, VodPlayAuth } from '../types/classroom.uts'
 
 export function getClassroomHome() : Promise<ClassroomHome> {
 	return request<ClassroomHome>('/api/classroom/home', 'GET', null, false)
+}
+
+export function getTrainings() : Promise<TrainingPage> {
+	return request<TrainingPage>('/api/classroom/trainings', 'GET', { per_page: 30 }, false)
+}
+
+export function getTrainingDetail(slug : string) : Promise<TrainingDetail> {
+	return request<TrainingDetail>(`/api/classroom/trainings/${encodeURIComponent(slug)}`, 'GET', null, false)
+}
+
+export function createTrainingOrder(slug : string, channel : string = 'auto') : Promise<CreateOrderResult> {
+	return request<CreateOrderResult>('/api/orders', 'POST', { training_slug: slug, channel: channel })
+}
+
+export function getOrder(orderNo : string) : Promise<ClassroomOrder> {
+	return request<ClassroomOrder>(`/api/orders/${orderNo}`)
+}
+
+export function payOrder(orderNo : string, channel : string = 'mock') : Promise<PayOrderResult> {
+	return request<PayOrderResult>(`/api/orders/${orderNo}/pay`, 'POST', { channel: channel })
 }
 
 export function getCourseProgress(courseId : number) : Promise<CourseProgressDetail> {

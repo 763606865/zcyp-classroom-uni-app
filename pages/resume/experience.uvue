@@ -1,5 +1,5 @@
 <template>
-	<scroll-view class="page" scroll-y>
+	<scroll-view class="page">
 		<view class="form-card">
 			<text class="section-title">{{ type == 'work' ? '工作经历' : '教育经历' }}</text>
 			<template v-if="type == 'work'">
@@ -15,9 +15,9 @@
 			<view class="field"><text class="label">开始日期 *</text><picker class="picker" mode="date" :value="form.start_date" @change="onStartChange"><text>{{ form.start_date == '' ? '请选择' : form.start_date }}</text></picker></view>
 			<view v-if="form.is_current == 0" class="field"><text class="label">结束日期</text><picker class="picker" mode="date" :value="form.end_date" @change="onEndChange"><text>{{ form.end_date == '' ? '请选择' : form.end_date }}</text></picker></view>
 			<view class="field"><text class="label">{{ type == 'work' ? '仍在职' : '仍在读' }}</text><switch color="#19a974" :checked="form.is_current == 1" @change="onCurrentChange" /></view>
-			<view class="textarea-field"><text class="label">经历描述</text><textarea v-model="form.description" class="textarea" maxlength="2000" placeholder="描述职责、成果或学习经历" /></view>
+			<view class="textarea-field"><text class="label">经历描述</text><textarea v-model="form.description" class="textarea" :maxlength="2000" placeholder="描述职责、成果或学习经历" /></view>
 		</view>
-		<button class="save-button" :loading="saving" @click="save">保存</button>
+		<button class="rc-button save-button" hover-class="rc-button-hover" :hover-start-time="20" :hover-stay-time="120" :loading="saving" @click="save">保存</button>
 	</scroll-view>
 </template>
 

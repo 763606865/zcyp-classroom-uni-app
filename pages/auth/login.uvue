@@ -1,14 +1,14 @@
 <template>
 	<RcNavBar title="登录" :show-back="true" :show-search="false" :show-scan="false" />
-	<scroll-view class="login-page" scroll-y>
+	<scroll-view class="login-page">
 		<view class="login-header"><view class="brand"><text class="brand-text">中</text></view><text class="title">手机号登录</text><text class="subtitle">未注册手机号验证后将自动创建账号</text></view>
 		<view class="login-card">
 			<text class="field-label">手机号</text>
 			<view v-if="useSavedPhone" class="saved-phone"><view><text class="saved-phone-value">{{ maskedPhone }}</text><text class="saved-phone-tip">验证码将发送到当前手机号</text></view><text class="change-phone" @click="changePhone">更换手机号</text></view>
-			<input v-else v-model="phone" class="field" type="number" maxlength="11" placeholder="请输入中国大陆手机号" />
+			<input v-else v-model="phone" class="field" type="number" :maxlength="11" placeholder="请输入中国大陆手机号" />
 			<text class="field-label code-label">短信验证码</text>
-			<view class="code-row"><input v-model="code" class="field code-field" type="number" maxlength="6" placeholder="请输入6位验证码" /><button class="code-button" :disabled="countdown > 0 || sending" @click="sendCode">{{ countdown > 0 ? countdown + 's' : '获取验证码' }}</button></view>
-			<button class="login-button" :loading="submitting" :disabled="submitting" @click="submit">{{ useSavedPhone ? '当前手机号登录' : '登录 / 注册' }}</button>
+			<view class="code-row"><input v-model="code" class="field code-field" type="number" :maxlength="6" placeholder="请输入6位验证码" /><button class="rc-button code-button" hover-class="rc-button-hover" :hover-start-time="20" :hover-stay-time="120" :disabled="countdown > 0 || sending" @click="sendCode">{{ countdown > 0 ? countdown + 's' : '获取验证码' }}</button></view>
+			<button class="rc-button login-button" hover-class="rc-button-hover" :hover-start-time="20" :hover-stay-time="120" :loading="submitting" :disabled="submitting" @click="submit">{{ useSavedPhone ? '当前手机号登录' : '登录 / 注册' }}</button>
 			<view class="agreement" @click="agreed = !agreed"><view class="checkbox" :class="{ checked: agreed }"><text v-if="agreed" class="checkbox-mark">✓</text></view><text class="agreement-text">我已阅读并同意《用户协议》和《隐私政策》</text></view>
 		</view>
 	</scroll-view>

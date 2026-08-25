@@ -1,0 +1,20 @@
+const ROOT_ANIMATION_DURATION = 220
+
+function normalizedRoute(route : string) : string {
+	return route.indexOf('/') == 0 ? route : `/${route}`
+}
+
+export function navigateRootPage(path : string) {
+	const pages = getCurrentPages()
+	for (let i = pages.length - 1; i >= 0; i--) {
+		if (normalizedRoute(pages[i].route) == path) {
+			const delta = pages.length - 1 - i
+			if (delta > 0) {
+				uni.navigateBack({ delta: delta, animationType: 'fade-out', animationDuration: ROOT_ANIMATION_DURATION })
+			}
+			return
+		}
+	}
+
+	uni.navigateTo({ url: path, animationType: 'fade-in', animationDuration: ROOT_ANIMATION_DURATION })
+}

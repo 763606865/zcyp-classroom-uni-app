@@ -4,13 +4,13 @@
 			<text class="hero-title">推荐牛人</text>
 			<text class="hero-subtitle">根据企业最新在招职位智能匹配</text>
 		</view>
-		<scroll-view class="content" scroll-y refresher-enabled :refresher-triggered="refreshing"
+		<scroll-view class="content" refresher-enabled :refresher-triggered="refreshing"
 			@refresherrefresh="refresh" @scrolltolower="loadMore">
 			<view v-if="loading && talents.length == 0" class="state"><text class="state-text">正在匹配候选人...</text></view>
 			<view v-else-if="talents.length == 0" class="empty">
 				<text class="empty-title">暂时没有推荐牛人</text>
 				<text class="empty-desc">发布职位或稍后再来，系统会持续更新匹配结果</text>
-				<button class="retry" @click="refresh">重新加载</button>
+				<button class="rc-button retry" hover-class="rc-button-hover" :hover-start-time="20" :hover-stay-time="120" @click="refresh">重新加载</button>
 			</view>
 			<view v-else class="list">
 				<TalentCard v-for="item in talents" :key="item.id" :item="item" />
