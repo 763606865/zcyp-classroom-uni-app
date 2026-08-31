@@ -39,7 +39,7 @@ export function getClientHeaders() : UTSJSONObject {
 	// #endif
 
 	// #ifdef MP-WEIXIN
-	clientType = 'mini-program'
+	clientType = 'wechat-mini'
 	platform = 'wechat'
 	channel = 'wechat'
 	// #endif
