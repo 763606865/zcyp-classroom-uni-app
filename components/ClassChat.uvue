@@ -36,37 +36,6 @@
 	let conversationNo = ''
 	let unsubscribe : Unsubscribe | null = null
 
-	onMounted(() => {
-		enter()
-		unsubscribe = imClient.subscribe((all : ChatMessage[]) => {
-			if (conversationNo == '') return
-			const filtered : ChatMessage[] = []
-			for (let i = 0; i < all.length; i++) {
-				if (all[i].conversation_no == conversationNo) filtered.push(all[i])
-			}
-			visible.value = filtered
-			scrollToBottom()
-		})
-	})
-	onUnmounted(() => { if (unsubscribe != null) unsubscribe!() })
-
-	function enter() {
-		errorText.value = ''
-		if (props.courseId <= 0) { errorText.value = '课程参数无效'; return }
-		ready.value = false
-		imClient.enterCourse(props.courseId).then((room) => {
-			conversationNo = room.conversation_no
-			title.value = room.title
-			ready.value = true
-			visible.value = imClient.getMessages(conversationNo)
-			scrollToBottom()
-		}).catch((err : any | null) => {
-			ready.value = false
-			const cause = err as Error | null
-			errorText.value = cause == null || cause!.message == '' ? '暂无法进入班级群聊' : cause!.message
-		})
-	}
-
 	function submit() {
 		const content = text.value.trim()
 		if (content == '' || conversationNo == '' || !ready.value) return
@@ -93,6 +62,36 @@
 		// 持续增大 scroll-top 触发滚动，保证新消息到达后始终停在底部
 		scrollTop.value = scrollTop.value + 100000
 	}
+	function enter() {
+		errorText.value = ''
+		if (props.courseId <= 0) { errorText.value = '课程参数无效'; return }
+		ready.value = false
+		imClient.enterCourse(props.courseId).then((room) => {
+			conversationNo = room.conversation_no
+			title.value = room.title
+			ready.value = true
+			visible.value = imClient.getMessages(conversationNo)
+			scrollToBottom()
+		}).catch((err : any | null) => {
+			ready.value = false
+			const cause = err as Error | null
+			errorText.value = cause == null || cause!.message == '' ? '暂无法进入班级群聊' : cause!.message
+		})
+	}
+
+	onMounted(() => {
+		enter()
+		unsubscribe = imClient.subscribe((all : ChatMessage[]) => {
+			if (conversationNo == '') return
+			const filtered : ChatMessage[] = []
+			for (let i = 0; i < all.length; i++) {
+				if (all[i].conversation_no == conversationNo) filtered.push(all[i])
+			}
+			visible.value = filtered
+			scrollToBottom()
+		})
+	})
+	onUnmounted(() => { if (unsubscribe != null) unsubscribe!() })
 </script>
 
 <style scoped>
