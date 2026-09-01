@@ -1,0 +1,481 @@
+import { bootstrapIm, enterCourseChatroom } from '../api/im.uts'
+import { imApiBase, imFetchMessages } from './im-api.uts'
+import type { ChatMessage, ImChatroomResult, ImConfig, ImEnterResult } from '../types/im.uts'
+
+type MessageListener = (messages : ChatMessage[]) => void
+
+function stringValue(value : any | null, fallback : string) : string {
+	if (value == null) return fallback
+	if (typeof value == 'string') {
+		const text = value as string
+		return text == '' ? fallback : text
+	}
+	if (typeof value == 'number') return `${value}`
+	return fallback
+}
+
+function objectValue(value : any | null) : UTSJSONObject | null {
+	if (value == null) return null
+	if (typeof value != 'object') return null
+	return value as UTSJSONObject | null
+}
+
+function normalizeChatMessage(raw : UTSJSONObject, conversationNo : string) : ChatMessage | null {
+	// 兼容 content 为字符串、{text} 对象或 body/payload 嵌套的多种下行格式
+	const contentValue = raw['content']
+	let content = stringValue(contentValue, '')
+	const contentObject = objectValue(contentValue)
+	if (content == '' && contentObject != null) {
+		content = stringValue(contentObject!['text'], stringValue(contentObject!['content'], ''))
+	}
+	if (content == '') content = stringValue(raw['text'], '')
+	const nested = objectValue(raw['body']) != null ? objectValue(raw['body']) : objectValue(raw['payload'])
+	if (content == '' && nested != null) {
+		content = stringValue(nested!['content'], stringValue(nested!['text'], ''))
+	}
+	if (content == '') return null
+	const user = objectValue(raw['user']) != null ? objectValue(raw['user']) : objectValue(raw['sender'])
+	let userName = stringValue(raw['sender_name'], stringValue(raw['nick_name'], '学员'))
+	let senderId = ''
+	if (user != null) {
+		userName = stringValue(user!['nick_name'], stringValue(user!['real_name'], stringValue(user!['name'], userName)))
+		senderId = stringValue(user!['id'], stringValue(user!['user_id'], ''))
+	}
+	const id = stringValue(raw['message_no'], stringValue(raw['id'], `${Date.now()}-${content.length > 8 ? content.substring(0, 8) : content}`))
+	// 消息体里的 conversation_id 是数字内部 id，不能当作会话号；缺失时用调用方传入的会话号。
+	const no = stringValue(raw['conversation_no'], conversationNo)
+	const userId = stringValue(raw['sender_user_id'], stringValue(raw['user_id'], stringValue(raw['sender_id'], senderId)))
+	return {
+		id: id,
+		conversation_no: no,
+		content: content,
+		user_id: userId,
+		user_name: userName,
+		created_at: stringValue(raw['created_at'], ''),
+		client_msg_id: stringValue(raw['client_msg_id'], '')
+	} as ChatMessage
+}
+
+class ImClient {
+	// 实例标识：若日志中出现多个不同 ID 同时在连，说明模块被重复打包产生了多实例
+	private readonly instanceId = `${Date.now() % 100000}${Math.floor(Math.random() * 1000)}`
+	private socketTask : SocketTask | null = null
+	private config : ImConfig | null = null
+	private reconnectTimer : number | null = null
+	private connectTimeoutTimer : number | null = null
+	private pendingConnectTimer : number | null = null
+	private lastConnectAt = 0
+	private conversations : string[] = []
+	private messages : Map<string, ChatMessage[]> = new Map<string, ChatMessage[]>()
+	private listeners : MessageListener[] = []
+	private connecting = false
+	private connected = false
+	private stopped = true
+	private retries = 0
+
+	start(config : ImConfig | null) {
+		if (config == null) return
+		const next = config!
+		if (next.enabled == false) return
+		this.config = next
+		this.stopped = false
+		this.retries = 0
+		if (next.ws_url == '' || next.token == null || next.token == '') return
+		// 旧连接未建立成功（含卡在 connecting 状态）时，拿到新凭证直接重建，
+		// 避免残留的 socketTask 占位导致永远无法重连。
+		if (this.socketTask != null && !this.connected) {
+			this.teardownSocket()
+			// 延迟少许再重连，等旧连接彻底释放；用受追踪的定时器，
+			// 避免多次 start 产生多个并行的延迟连接撞小程序并发上限。
+			if (this.pendingConnectTimer != null) clearTimeout(this.pendingConnectTimer!)
+			this.pendingConnectTimer = setTimeout(() => {
+				this.pendingConnectTimer = null
+				this.connect()
+			}, 300)
+			return
+		}
+		this.connect()
+	}
+
+	retry() : Promise<ImConfig> {
+		return bootstrapIm().then((config : ImConfig) : ImConfig => {
+			this.start(config)
+			return config
+		})
+	}
+
+	enterCourse(courseId : number) : Promise<ImEnterResult> {
+		let ensure : Promise<ImConfig | null>
+		if (this.config == null && this.socketTask == null) {
+			// 登录后 IM 不可用时，进群前先尝试刷新凭证；失败也不阻断进群流程
+			ensure = bootstrapIm().then((config : ImConfig) : ImConfig | null => {
+				this.start(config)
+				return config
+			}).catch((_ : any | null) : ImConfig | null => { return null })
+		} else {
+			ensure = Promise.resolve(this.config)
+		}
+		return ensure.then((_ : ImConfig | null) : Promise<ImChatroomResult> => {
+			return enterCourseChatroom(courseId)
+		}).then((room : ImChatroomResult) : ImEnterResult => {
+			const conversationNo = room.conversation.conversation_no
+			if (conversationNo == '') throw new Error('聊天室未返回会话号')
+			if (this.conversations.indexOf(conversationNo) < 0) this.conversations.push(conversationNo)
+			const history : ChatMessage[] = []
+			if (room.messages != null) {
+				const rows = room.messages!
+				for (let i = 0; i < rows.length; i++) {
+					const item = normalizeChatMessage(rows[i], conversationNo)
+					if (item != null) history.push(item!)
+				}
+			}
+			if (history.length > 0) {
+				this.messages.set(conversationNo, history)
+				this.emit()
+			}
+			this.start({
+				enabled: true,
+				user_id: room.user_id,
+				external_user_id: room.external_user_id,
+				token: room.token,
+				expires_in: room.expires_in,
+				ws_url: room.ws_url,
+				protocol: room.protocol,
+				send_event: room.send_event
+			} as ImConfig)
+			this.join(conversationNo)
+			// 进群接口未带历史时，按《会话与消息》文档从 IM 服务拉取
+			if (history.length == 0) this.fetchHistory(conversationNo)
+			return {
+				conversation_no: conversationNo,
+				title: room.conversation.title == '' ? '班级群聊' : room.conversation.title
+			} as ImEnterResult
+		})
+	}
+
+	sendText(conversationNo : string, content : string) {
+		// 真实网关为扁平 action 帧协议（对照 zcyp-web/ImChatShell.vue）：
+		// {action:'send_message', conversation_no, message_type, client_msg_id, content:{text}}
+		const clientMsgId = `client_${Date.now()}_${Math.floor(Math.random() * 1000000)}`
+		const frame = {
+			action: 'send_message',
+			conversation_no: conversationNo,
+			message_type: 'text',
+			client_msg_id: clientMsgId,
+			content: { text: content } as UTSJSONObject
+		} as UTSJSONObject
+		console.log(`IM 发送帧(连接就绪=${this.connected})：${JSON.stringify(frame)}`)
+		this.send(frame)
+		// 本地占位消息带上 client_msg_id，服务端广播回执时按此去重合并，避免重复显示。
+		const mine : ChatMessage = {
+			id: `local-${Date.now()}`,
+			conversation_no: conversationNo,
+			content: content,
+			user_id: this.config == null ? '' : this.config!.user_id,
+			user_name: '我',
+			created_at: '',
+			client_msg_id: clientMsgId
+		}
+		this.push(mine)
+	}
+
+	getMessages(conversationNo : string) : ChatMessage[] {
+		const list = this.messages.get(conversationNo)
+		return list == null ? [] : list!
+	}
+
+	getUserId() : string {
+		return this.config == null ? '' : this.config!.user_id
+	}
+
+	getExternalUserId() : string {
+		if (this.config == null || this.config!.external_user_id == null) return ''
+		return this.config!.external_user_id!
+	}
+
+	subscribe(listener : MessageListener) : () => void {
+		this.listeners.push(listener)
+		listener(this.snapshot())
+		return () : void => {
+			const index = this.listeners.indexOf(listener)
+			if (index >= 0) this.listeners.splice(index, 1)
+		}
+	}
+
+	stop() {
+		this.stopped = true
+		this.connected = false
+		this.conversations = []
+		this.messages = new Map<string, ChatMessage[]>()
+		this.clearTimers()
+		if (this.socketTask != null) {
+			this.socketTask!.close({})
+			this.socketTask = null
+		}
+		this.config = null
+		this.emit()
+	}
+
+	private snapshot() : ChatMessage[] {
+		const all : ChatMessage[] = []
+		for (let i = 0; i < this.conversations.length; i++) {
+			const list = this.messages.get(this.conversations[i])
+			if (list != null) {
+				for (let j = 0; j < list!.length; j++) all.push(list![j])
+			}
+		}
+		return all
+	}
+
+	private emit() {
+		const all = this.snapshot()
+		for (let i = 0; i < this.listeners.length; i++) this.listeners[i](all)
+	}
+
+	private push(message : ChatMessage) {
+		const list = this.getMessages(message.conversation_no)
+		// 服务端回执与本地占位消息按 client_msg_id / 内容去重合并
+		for (let i = 0; i < list.length; i++) {
+			if (list[i].id == message.id && !message.id.startsWith('local-')) return
+			if (list[i].client_msg_id != '' && list[i].client_msg_id == message.client_msg_id) {
+				const next = list.slice(0)
+				next[i] = message.id.startsWith('local-') ? list[i] : message
+				this.messages.set(message.conversation_no, next)
+				this.emit()
+				return
+			}
+			if (list[i].content == message.content
+				&& (list[i].id.startsWith('local-') != message.id.startsWith('local-'))) {
+				const next = list.slice(0)
+				next[i] = message.id.startsWith('local-') ? list[i] : message
+				this.messages.set(message.conversation_no, next)
+				this.emit()
+				return
+			}
+		}
+		const next = list.slice(0)
+		next.push(message)
+		this.messages.set(message.conversation_no, next)
+		this.emit()
+	}
+
+	private fetchHistory(conversationNo : string) {
+		const base = imApiBase(this.config)
+		const token = this.config == null || this.config!.token == null ? '' : this.config!.token!
+		if (base == '' || token == '') {
+			console.warn(`IM 历史消息跳过：${base == '' ? '基址无法推导' : 'IM Token 缺失'}`)
+			return
+		}
+		imFetchMessages(base, token, conversationNo, 50).then((rows : UTSJSONObject[]) => {
+			console.log(`IM 历史消息返回 ${rows.length} 条`)
+			const items : ChatMessage[] = []
+			for (let i = 0; i < rows.length; i++) {
+				const item = normalizeChatMessage(rows[i], conversationNo)
+				if (item != null) items.push(item!)
+			}
+			if (items.length == 0) {
+				// 接口有返回但全部解析失败时，输出首条原始数据便于核对字段结构
+				if (rows.length > 0) console.warn(`IM 历史消息解析为空，首条原始数据：${JSON.stringify(rows[0])}`)
+				return
+			}
+			// 兼容降序返回：若首条时间晚于末条则反转为时间正序，并合并已有实时消息去重。
+			if (items.length > 1 && items[0].created_at > items[items.length - 1].created_at) items.reverse()
+			const existing = this.getMessages(conversationNo)
+			const merged : ChatMessage[] = items.slice(0)
+			for (let i = 0; i < existing.length; i++) {
+				let duplicated = false
+				for (let j = 0; j < merged.length; j++) {
+					if (merged[j].id == existing[i].id
+						|| (merged[j].client_msg_id != '' && merged[j].client_msg_id == existing[i].client_msg_id)) {
+						duplicated = true
+						break
+					}
+				}
+				if (!duplicated) merged.push(existing[i])
+			}
+			this.messages.set(conversationNo, merged)
+			this.emit()
+		}).catch((err : any | null) => {
+			const cause = err as Error | null
+			console.warn(`IM 历史消息拉取失败：${cause == null ? '未知错误' : cause!.message}`)
+		})
+	}
+
+	private connect() {
+		if (this.stopped || this.connecting || this.config == null) return
+		const config = this.config!
+		if (config.ws_url == '') return
+		if (this.socketTask != null) return
+		// 频率保护：1 秒内最多发起一次连接，其余并入重连队列，
+		// 保证任何时刻只有一个在建连接，不会触发小程序“最多 2 个 socket”限制。
+		const now = Date.now()
+		if (now - this.lastConnectAt < 1000) {
+			if (!this.stopped) this.scheduleReconnect()
+			return
+		}
+		this.lastConnectAt = now
+		this.connecting = true
+		// 服务端网关要求握手时带 IM token（不带返回 400 token is required），
+		// WebSocket 无法自定义请求头，只能拼在 URL 查询参数里。
+		let url = config.ws_url
+		if (config.token != null && config.token != '') {
+			const sep = url.indexOf('?') >= 0 ? '&' : '?'
+			url = `${url}${sep}token=${encodeURIComponent(config.token!)}`
+		}
+		console.log(`IM[${this.instanceId}] 尝试建立连接：${config.ws_url}${config.token == null || config.token == '' ? '' : '?token=***'}`)
+		// 必须传入 complete 回调，否则部分平台（如 Web）会返回 Promise 而非 SocketTask，
+		// 导致后续 socketTask.send 报 "is not a function"。
+		const task : SocketTask = uni.connectSocket({
+			url: url,
+			fail: (err) => {
+				// 平台级失败原因（如域名未备案、超过并发上限）在这里，必须打出来
+				console.warn(`IM[${this.instanceId}] connectSocket 失败：${JSON.stringify(err)}`)
+			},
+			complete: (_ : any | null) => { }
+		})
+		this.socketTask = task
+		// 连接超时保护：10 秒内未 onOpen 则主动拆掉并进入重连，
+		// 避免握手失败（如 wss 证书、网络问题）时卡死在 connecting 状态。
+		this.connectTimeoutTimer = setTimeout(() => {
+			if (this.connected || this.socketTask != task) return
+			console.warn(`IM[${this.instanceId}] 连接超时(10s)，拆除并重连`)
+			this.teardownSocket()
+			if (!this.stopped) this.scheduleReconnect()
+		}, 10000)
+		// 所有回调均先校验 task 是否仍是当前连接：旧连接被拆除后异步触发的
+		// onClose/onError 不得再改动状态或调度重连，否则会重复建连撞到小程序并发上限。
+		task.onOpen(() => {
+			if (this.socketTask != task) return
+			this.clearConnectTimeout()
+			this.connecting = false
+			this.connected = true
+			this.retries = 0
+			// token 已在握手 URL 上完成鉴权，无需再发 auth 帧；直接重新订阅会话。
+			console.log(`IM[${this.instanceId}] 连接已建立，订阅 ${this.conversations.length} 个会话`)
+			for (let i = 0; i < this.conversations.length; i++) this.join(this.conversations[i])
+		})
+		task.onMessage((event) => {
+			if (this.socketTask != task) return
+			this.handleMessage(event.data as string)
+		})
+		task.onError((res) => {
+			if (this.socketTask != task) return
+			// 部分平台 onError 后不一定触发 onClose；复位标志并走重连，避免 connecting 卡死阻断后续重连。
+			console.warn(`IM[${this.instanceId}] WebSocket 出错：${res.errMsg}，准备重连`)
+			this.clearConnectTimeout()
+			this.connecting = false
+			this.connected = false
+			this.socketTask = null
+			if (!this.stopped) this.scheduleReconnect()
+		})
+		task.onClose((res) => {
+			if (this.socketTask != task) return
+			console.warn(`IM[${this.instanceId}] WebSocket 已关闭：${res.reason}`)
+			this.clearConnectTimeout()
+			this.connecting = false
+			this.connected = false
+			this.socketTask = null
+			this.clearTimers()
+			if (!this.stopped) this.scheduleReconnect()
+		})
+	}
+
+	private teardownSocket() {
+		this.clearConnectTimeout()
+		this.connecting = false
+		this.connected = false
+		if (this.socketTask != null) {
+			this.socketTask!.close({})
+			this.socketTask = null
+		}
+	}
+
+	private join(conversationNo : string) {
+		if (this.socketTask == null) return
+		// 网关订阅帧：{action:'subscribe', conversation_no}，成功回执 {action:'subscribed'}
+		this.send({
+			action: 'subscribe',
+			conversation_no: conversationNo
+		} as UTSJSONObject)
+	}
+
+	private send(frame : UTSJSONObject) {
+		// 连接未就绪时丢弃并告警；重连后 onOpen 会重新订阅会话，消息帧由用户重发。
+		if (!this.connected || this.socketTask == null) {
+			console.warn(`IM 帧被丢弃(action=${stringValue(frame['action'], '')})：WebSocket 未就绪，请检查连接是否建立成功`)
+			return
+		}
+		this.socketTask!.send({
+			data: JSON.stringify(frame)
+		})
+	}
+
+	private handleMessage(raw : string) {
+		try {
+			const frame = JSON.parse<UTSJSONObject>(raw)
+			if (frame != null) this.handleFrame(frame!)
+			return
+		} catch (_) { }
+		try {
+			const frames = JSON.parse<UTSJSONObject[]>(raw)
+			if (frames != null) {
+				for (let i = 0; i < frames!.length; i++) this.handleFrame(frames![i])
+			}
+		} catch (_) { }
+	}
+
+	private handleFrame(frame : UTSJSONObject) {
+		// 真实网关为扁平 action 帧协议：subscribed / message / conversation_changed / error
+		const action = stringValue(frame['action'], '')
+		console.log(`IM 下行帧：${JSON.stringify(frame)}`)
+		if (action == 'subscribed' || action == 'conversation_changed') return
+		if (action == 'error') {
+			console.warn(`IM 服务端错误帧：${stringValue(frame['error'], '未知错误')}`)
+			return
+		}
+		if (action != 'message') return
+		const fallbackNo = this.conversations.length > 0 ? this.conversations[0] : ''
+		const frameNo = stringValue(frame['conversation_no'], fallbackNo)
+		const message = objectValue(frame['message'])
+		if (message == null) return
+		const conversationNo = stringValue(message!['conversation_no'], frameNo)
+		const item = normalizeChatMessage(message!, conversationNo)
+		if (item != null) this.push(item!)
+	}
+
+	private scheduleReconnect() {
+		this.clearReconnect()
+		const delay = Math.floor(Math.min(1000 * Math.pow(2, this.retries), 15000))
+		this.retries += 1
+		this.reconnectTimer = setTimeout(() => { this.connect() }, delay)
+	}
+
+	private clearReconnect() {
+		if (this.reconnectTimer != null) {
+			clearTimeout(this.reconnectTimer!)
+			this.reconnectTimer = null
+		}
+	}
+
+	private clearConnectTimeout() {
+		if (this.connectTimeoutTimer != null) {
+			clearTimeout(this.connectTimeoutTimer!)
+			this.connectTimeoutTimer = null
+		}
+	}
+
+	private clearPendingConnect() {
+		if (this.pendingConnectTimer != null) {
+			clearTimeout(this.pendingConnectTimer!)
+			this.pendingConnectTimer = null
+		}
+	}
+
+	private clearTimers() {
+		this.clearReconnect()
+		this.clearConnectTimeout()
+		this.clearPendingConnect()
+	}
+}
+
+export const imClient = new ImClient()

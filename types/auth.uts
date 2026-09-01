@@ -1,3 +1,5 @@
+import type { ImConfig } from './im.uts'
+
 export type AuthUser = {
 	id : number
 	uuid : string
@@ -16,6 +18,7 @@ export type LoginResult = {
 	token_type : string
 	access_token : string
 	user : AuthUser
+	im ?: ImConfig | null
 }
 
 export type SmsCodeResult = {

@@ -43,7 +43,6 @@ const output = `// This file is generated from .env by scripts/sync-env.mjs.
 
 export const APP_NAME = ${utsString(envText(values, 'APP_NAME', ''))}
 export const API_BASE_URL = ${utsString(envText(values, 'API_BASE_URL', ''))}
-export const IM_BASE_URL = ${utsString(envText(values, 'IM_BASE_URL', ''))}
 export const VERSION_CHECK_PATH = ${utsString(envText(values, 'VERSION_CHECK_PATH', ''))}
 export const REQUEST_TIMEOUT = ${envNumber(values, 'REQUEST_TIMEOUT', 15000)}
 `

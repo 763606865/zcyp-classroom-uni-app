@@ -1,0 +1,123 @@
+import type { ImConfig } from '../types/im.uts'
+
+// IM 服务 HTTP 接口（会话与消息）的基址与请求封装。
+// 基址从 bootstrap 下发的 ws_url 推导（wss://host/ws -> https://host），
+// 鉴权使用业务接口下发的短期 IM Token（Bearer）。
+
+function textOf(value : string | null, fallback : string) : string {
+	return value == null || value == '' ? fallback : value
+}
+
+// 对齐 Web 端的类型守卫写法：先用 Array.isArray 实测再转型，
+// 避免 as 转型在运行时不校验导致拿到非数组（.length 为 undefined）。
+function toRowArray(value : any | null) : UTSJSONObject[] | null {
+	if (value == null) return null
+	if (!Array.isArray(value)) return null
+	return value as UTSJSONObject[] | null
+}
+
+function toRecord(value : any | null) : UTSJSONObject | null {
+	if (value == null) return null
+	if (typeof value != 'object') return null
+	if (Array.isArray(value)) return null
+	return value as UTSJSONObject | null
+}
+
+function extractError(body : any | null) : string {
+	// IM 服务错误响应形如 {"error":"..."}；数组/非对象响应不做错误提取。
+	if (body == null) return ''
+	if (typeof body != 'object') return ''
+	if (Array.isArray(body)) return ''
+	const obj = body as UTSJSONObject | null
+	if (obj == null) return ''
+	return textOf(obj!['error'] as string | null, '')
+}
+
+export function imApiBase(config : ImConfig | null) : string {
+	if (config == null) return ''
+	const wsUrl = config!.ws_url
+	if (wsUrl == '') return ''
+	let base = wsUrl
+	if (base.indexOf('wss://') == 0) base = 'https://' + base.substring(6)
+	else if (base.indexOf('ws://') == 0) base = 'http://' + base.substring(5)
+	else return ''
+	// 去掉 /ws 之类的应用路径，只保留来源
+	const schemeEnd = base.indexOf('//') + 2
+	const pathStart = base.indexOf('/', schemeEnd)
+	if (pathStart > 0) base = base.substring(0, pathStart)
+	return base
+}
+
+function imApiRequest<T>(path : string, method : RequestMethod, data : any | null, token : string) : Promise<T> {
+	return new Promise<T>((resolve, reject) => {
+		if (token == '') {
+			reject(new Error('IM 凭证缺失'))
+			return
+		}
+		uni.request({
+			url: path,
+			method: method,
+			data: data,
+			header: {
+				'Authorization': `Bearer ${token}`,
+				'Accept': 'application/json',
+				'Content-Type': 'application/json'
+			} as UTSJSONObject,
+			success: (response) => {
+				const statusCode = response.statusCode
+				if (statusCode == 401) {
+					reject(new Error('IM 凭证已失效，请重新进入'))
+					return
+				}
+				if (statusCode < 200 || statusCode >= 300) {
+					reject(new Error(`IM 请求失败(${statusCode})`))
+					return
+				}
+				const body = response.data
+				const error = extractError(body)
+				if (error != '') {
+					reject(new Error(error))
+					return
+				}
+				resolve(body as T)
+			},
+			fail: () => {
+				reject(new Error('IM 网络连接失败'))
+			}
+		})
+	})
+}
+
+// GET /im/conversations/:conversation_no/messages
+export function imFetchMessages(base : string, token : string, conversationNo : string, limit : number) : Promise<UTSJSONObject[]> {
+	return imApiRequest<any>(`${base}/im/conversations/${encodeURIComponent(conversationNo)}/messages?limit=${limit}`, 'GET', null, token).then((body : any) : UTSJSONObject[] => {
+		// 部分平台 response.data 为 JSON 字符串，先归一为已解析对象/数组。
+		let parsed : any | null = body
+		if (typeof body == 'string') parsed = JSON.parse<any>(body as string)
+		// 1. 裸数组
+		const direct = toRowArray(parsed)
+		if (direct != null) return direct!
+		// 2. 包裹对象：逐键尝试提取数组字段（首层），再尝试常见包裹键（次层）
+		const obj = toRecord(parsed)
+		if (obj != null) {
+			const keys = Object.keys(obj!)
+			for (let i = 0; i < keys.length; i++) {
+				const rows = toRowArray(obj![keys[i]])
+				if (rows != null) return rows!
+			}
+			const wrappers = ['messages', 'data', 'items', 'list', 'rows', 'result']
+			for (let i = 0; i < wrappers.length; i++) {
+				const inner = toRecord(obj![wrappers[i]])
+				if (inner == null) continue
+				const innerKeys = Object.keys(inner!)
+				for (let j = 0; j < innerKeys.length; j++) {
+					const rows = toRowArray(inner![innerKeys[j]])
+					if (rows != null) return rows!
+				}
+			}
+		}
+		// 3. 无法提取时输出原始响应体，便于对照服务端实际结构
+		console.warn(`IM 历史消息响应未识别，原始响应：${JSON.stringify(body)}`)
+		return []
+	})
+}

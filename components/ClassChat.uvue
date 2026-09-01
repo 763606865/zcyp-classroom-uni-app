@@ -1,0 +1,100 @@
+<template>
+	<view class="chat-card">
+		<view class="chat-head"><text class="chat-title">{{ title }}</text><text v-if="!ready && errorText == ''" class="chat-status">加入中…</text></view>
+		<scroll-view class="chat-list" scroll-y :scroll-top="scrollTop" :scroll-with-animation="true">
+			<view v-if="errorText != ''" class="chat-tip"><text>{{ errorText }}</text><text class="chat-retry" @click="enter">重新加入</text></view>
+			<view v-else-if="!ready" class="chat-tip"><text>正在加入班级群聊…</text></view>
+			<view v-else-if="visible.length == 0" class="chat-tip"><text>还没有消息，打个招呼吧。</text></view>
+			<view v-for="item in visible" :key="item.id" class="msg" :class="{ mine: isMine(item) }">
+				<text class="msg-name">{{ isMine(item) ? '我' : item.user_name }}</text>
+				<view class="msg-line" :class="{ mine: isMine(item) }">
+					<text class="msg-bubble" :class="{ mine: isMine(item) }">{{ item.content }}</text>
+				</view>
+			</view>
+			<view class="chat-bottom" />
+		</scroll-view>
+		<view class="chat-input-row">
+			<input class="chat-input" v-model="text" :disabled="!ready" :maxlength="500" :placeholder="ready ? '输入消息' : '群聊未就绪'" confirm-type="send" @confirm="submit" />
+			<button class="rc-button chat-send" hover-class="rc-button-hover" :hover-start-time="20" :hover-stay-time="120" :disabled="!ready || text.trim() == ''" @click="submit">发送</button>
+		</view>
+	</view>
+</template>
+
+<script setup lang="uts">
+	import { imClient } from '../services/im-client.uts'
+	import { getUser } from '../stores/auth.uts'
+	import type { ChatMessage } from '../types/im.uts'
+
+	type Unsubscribe = () => void
+
+	const props = defineProps({
+		courseId: { type: Number, default: 0 }
+	})
+
+	const title = ref('班级群聊'); const ready = ref(false); const errorText = ref(''); const text = ref(''); const scrollTop = ref(0)
+	const visible = ref<ChatMessage[]>([])
+	let conversationNo = ''
+	let unsubscribe : Unsubscribe | null = null
+
+	onMounted(() => {
+		enter()
+		unsubscribe = imClient.subscribe((all : ChatMessage[]) => {
+			if (conversationNo == '') return
+			const filtered : ChatMessage[] = []
+			for (let i = 0; i < all.length; i++) {
+				if (all[i].conversation_no == conversationNo) filtered.push(all[i])
+			}
+			visible.value = filtered
+			scrollToBottom()
+		})
+	})
+	onUnmounted(() => { if (unsubscribe != null) unsubscribe!() })
+
+	function enter() {
+		errorText.value = ''
+		if (props.courseId <= 0) { errorText.value = '课程参数无效'; return }
+		ready.value = false
+		imClient.enterCourse(props.courseId).then((room) => {
+			conversationNo = room.conversation_no
+			title.value = room.title
+			ready.value = true
+			visible.value = imClient.getMessages(conversationNo)
+			scrollToBottom()
+		}).catch((err : any | null) => {
+			ready.value = false
+			const cause = err as Error | null
+			errorText.value = cause == null || cause!.message == '' ? '暂无法进入班级群聊' : cause!.message
+		})
+	}
+
+	function submit() {
+		const content = text.value.trim()
+		if (content == '' || conversationNo == '' || !ready.value) return
+		imClient.sendText(conversationNo, content)
+		text.value = ''
+	}
+
+	function isMine(item : ChatMessage) : boolean {
+		if (item.user_name == '我') return true
+		if (item.user_id == '') return false
+		// 消息里的发送者 ID 可能是业务用户 ID / uuid / IM 外部 ID / IM 侧 ID，与 Web 端一致逐个比对
+		if (item.user_id == imClient.getUserId()) return true
+		const externalId = imClient.getExternalUserId()
+		if (externalId != '' && item.user_id == externalId) return true
+		const user = getUser()
+		if (user != null) {
+			if (`${user!.id}` == item.user_id) return true
+			if (user!.uuid != '' && user!.uuid == item.user_id) return true
+		}
+		return false
+	}
+
+	function scrollToBottom() {
+		// 持续增大 scroll-top 触发滚动，保证新消息到达后始终停在底部
+		scrollTop.value = scrollTop.value + 100000
+	}
+</script>
+
+<style scoped>
+	.chat-card{margin:0 16px 14px;border-radius:15px;background:#fff;padding:15px}.chat-head{flex-direction:row;align-items:center;justify-content:space-between}.chat-title{font-size:16px;font-weight:700;color:#243830}.chat-status{font-size:11px;color:#8b9691}.chat-list{height:300px;margin-top:11px}.chat-tip{padding:26px 12px;align-items:center;color:#8a9691;font-size:12px;text-align:center}.chat-retry{margin-top:8px;color:#0F62FE}.msg{margin-top:11px;align-items:flex-start}.mine{align-items:flex-end}.msg-name{font-size:10px;color:#919b97}.msg-line{margin-top:4px;flex-direction:row;align-items:center}.msg-line.mine{justify-content:flex-end}.msg-bubble{padding:7px 11px;border-radius:11px;background:#F5F7FA;color:#33453e;font-size:13px;line-height:19px;max-width:86%}.msg-bubble.mine{background:#E8F0FE;color:#1449a8}.chat-input-row{margin-top:11px;flex-direction:row}.chat-input{flex:1;height:40px;padding:0 12px;border-radius:10px;background:#F5F7FA;font-size:13px}.chat-send{width:76px;height:40px;margin-left:9px;border-radius:10px;background:#0F62FE;color:#fff;font-size:13px}.chat-bottom{height:4px}
+</style>

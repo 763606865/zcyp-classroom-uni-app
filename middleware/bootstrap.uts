@@ -1,5 +1,6 @@
 import { hydrateAuth, isLoggedIn, setUser } from '../stores/auth.uts'
 import { getMe } from '../api/auth.uts'
+import { imClient } from '../services/im-client.uts'
 import { checkAppVersion } from './version.uts'
 
 export function bootstrapApp() {
@@ -11,5 +12,7 @@ export function bootstrapApp() {
 		}).catch(() => {
 			// 401 由请求层统一清理，其余错误保留离线会话。
 		})
+		// 冷启动重新获取 IM 短期凭证并建连，失败不阻断应用启动。
+		imClient.retry().catch(() => {})
 	}
 }

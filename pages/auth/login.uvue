@@ -17,6 +17,7 @@
 <script setup lang="uts">
 	import { phoneLogin, sendSmsCode } from '../../api/auth.uts'
 	import RcNavBar from '../../components/RcNavBar.uvue'
+	import { imClient } from '../../services/im-client.uts'
 	import { getLastLoginPhone, setSession } from '../../stores/auth.uts'
 
 	const phone = ref(''); const code = ref(''); const agreed = ref(true); const sending = ref(false); const submitting = ref(false); const countdown = ref(0); const useSavedPhone = ref(false)
@@ -55,7 +56,10 @@
 		if (!agreed.value) { showError('请先同意用户协议和隐私政策'); return }
 		submitting.value = true
 		phoneLogin(phone.value, code.value).then((result) => {
-			setSession(result); uni.showToast({ title: '登录成功', icon: 'success' })
+			setSession(result)
+			// 登录响应携带 IM 凭证时立即建连；IM 不可用不影响登录结果，后续可通过 bootstrap 重试
+			if (result.im != null) imClient.start(result.im)
+			uni.showToast({ title: '登录成功', icon: 'success' })
 			setTimeout(() => { uni.reLaunch({ url: redirect }) }, 300); submitting.value = false
 		}).catch((error : any | null) => { showError(errorMessage(error, '登录失败')); submitting.value = false })
 	}
