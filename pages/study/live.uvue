@@ -7,6 +7,7 @@
 			<scroll-view class="content" scroll-y>
 				<view class="info"><view class="live-line"><text class="badge" :class="{ living: detail!.session.status == 'living' }">{{ statusText(detail!.session.status) }}</text><text v-if="detail!.session.status == 'living'" class="online">{{ detail!.session.online_count }} 人在线</text></view><text class="title">{{ detail!.session.title }}</text><text class="time">{{ timeRange }}</text><text v-if="detail!.play_urls != null && detail!.play_urls!.expires_at != null" class="expire">播放地址有效期至 {{ detail!.play_urls!.expires_at }}</text></view>
 				<view class="notice"><text class="notice-title">观看提示</text><text class="notice-text">进入直播后系统会自动记录有效观看时长，请保持网络稳定。直播结束后，回放生成可能需要一些时间。</text></view>
+				<CoursewarePanel :course-id="courseId" :lesson-id="lessonId" />
 				<ClassChat :course-id="courseId" />
 				<view class="bottom-space" />
 			</scroll-view>
@@ -17,13 +18,14 @@
 <script setup lang="uts">
 	import { getLiveSession, sendLiveHeartbeat } from '../../api/classroom.uts'
 	import ClassChat from '../../components/ClassChat.uvue'
+	import CoursewarePanel from '../../components/CoursewarePanel.uvue'
 	import RcNavBar from '../../components/RcNavBar.uvue'
 	import type { LiveSessionDetail } from '../../types/classroom.uts'
-	const sessionId = ref(0); const courseId = ref(0); const detail = ref<LiveSessionDetail | null>(null); const loading = ref(true); const playUrl = ref('')
+	const sessionId = ref(0); const courseId = ref(0); const lessonId = ref(0); const detail = ref<LiveSessionDetail | null>(null); const loading = ref(true); const playUrl = ref('')
 	let heartbeatTimer : number | null = null
 	let deviceId = ''
 	const timeRange = computed(() : string => { if (detail.value == null) return ''; const start = detail.value!.session.scheduled_start_at; const end = detail.value!.session.scheduled_end_at; return `${start == null ? '时间待定' : start}${end == null ? '' : ' 至 ' + end}` })
-	onLoad((options : UTSJSONObject) => { const value = options['id'] as string | null; sessionId.value = value == null ? 0 : parseInt(value); const courseValue = options['courseId'] as string | null; courseId.value = courseValue == null ? 0 : parseInt(courseValue); const stored = uni.getStorageSync('classroom_device_id'); deviceId = stored == null ? '' : stored as string; load() })
+	onLoad((options : UTSJSONObject) => { const value = options['id'] as string | null; sessionId.value = value == null ? 0 : parseInt(value); const courseValue = options['courseId'] as string | null; courseId.value = courseValue == null ? 0 : parseInt(courseValue); const lessonValue = options['lessonId'] as string | null; lessonId.value = lessonValue == null ? 0 : parseInt(lessonValue); const stored = uni.getStorageSync('classroom_device_id'); deviceId = stored == null ? '' : stored as string; load() })
 	onUnload(() => stopHeartbeat())
 	function load() { if (sessionId.value <= 0) { loading.value = false; return }; loading.value = true; getLiveSession(sessionId.value).then((data) => { detail.value = data; selectPlayUrl(data); loading.value = false; if (data.session.status == 'living') startHeartbeat() }).catch(() => { detail.value = null; loading.value = false }) }
 	function selectPlayUrl(data : LiveSessionDetail) { playUrl.value = ''; if (data.session.status == 'living' && data.play_urls != null) { if (data.play_urls!.hls != null) playUrl.value = data.play_urls!.hls!; else if (data.play_urls!.flv != null) playUrl.value = data.play_urls!.flv!; return }; if (data.session.status == 'playback' && data.playback != null && data.playback!.url != null) playUrl.value = data.playback!.url! }

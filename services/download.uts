@@ -1,0 +1,56 @@
+// 课件下载/打开的跨端封装。
+// 统一使用 uni 跨端 API（各端由 uni 适配），与项目简历附件预览保持一致：
+// - 图片：uni.previewImage 直接预览
+// - 其他文档：uni.downloadFile 下载后 uni.openDocument 打开
+// 注意：小程序端需在后台配置 downloadFile 合法域名，否则下载会失败。
+
+function normalizeType(value : string) : string {
+	return value.trim().toLowerCase()
+}
+
+function isImageType(fileType : string) : boolean {
+	const t = normalizeType(fileType)
+	return t == 'jpg' || t == 'jpeg' || t == 'png' || t == 'gif' || t == 'webp' || t == 'bmp'
+}
+
+// 依次从 file_type、original_name、url 推断文件扩展名（小写）
+export function resolveFileType(fileType : string | null, originalName : string | null, url : string) : string {
+	if (fileType != null && fileType!.trim() != '') return normalizeType(fileType!)
+	const source = (originalName != null && originalName!.trim() != '') ? originalName! : url
+	const clean = source.split('?')[0]
+	const dot = clean.lastIndexOf('.')
+	if (dot >= 0 && dot < clean.length - 1) return normalizeType(clean.substring(dot + 1))
+	return ''
+}
+
+// 下载并打开/预览课件
+export function openCourseware(url : string, fileType : string) {
+	if (url == '') {
+		uni.showToast({ title: '课件地址无效', icon: 'none' })
+		return
+	}
+	if (isImageType(fileType)) {
+		uni.previewImage({ urls: [url], current: url })
+		return
+	}
+	uni.showLoading({ title: '正在下载...', mask: true })
+	uni.downloadFile({
+		url: url,
+		success: (result) => {
+			uni.hideLoading()
+			if (result.statusCode != 200) {
+				uni.showToast({ title: '课件下载失败', icon: 'none' })
+				return
+			}
+			uni.openDocument({
+				filePath: result.tempFilePath,
+				showMenu: true,
+				fail: () => uni.showToast({ title: '暂不支持打开该文件类型', icon: 'none' })
+			})
+		},
+		fail: () => {
+			uni.hideLoading()
+			uni.showToast({ title: '下载失败，请检查网络或域名配置', icon: 'none' })
+		}
+	})
+}

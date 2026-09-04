@@ -1,0 +1,168 @@
+<template>
+	<view class="cc-card">
+		<view class="cc-head">
+			<text class="cc-title">课程评论</text>
+			<text class="cc-summary">{{ total }} 条{{ averageText != '' ? ' · 均分 ' + averageText : '' }}</text>
+		</view>
+
+		<view class="cc-form">
+			<view class="cc-rating-row">
+				<text class="cc-label">评分</text>
+				<view class="cc-stars-input">
+					<text v-for="n in starOptions" :key="n" class="cc-star-input" :class="{ on: n <= rating }" @click="setRating(n)">{{ n <= rating ? '★' : '☆' }}</text>
+				</view>
+			</view>
+			<text class="cc-label">{{ editing ? '修改我的评论' : '写评论' }}</text>
+			<textarea class="cc-textarea" v-model="content" :maxlength="1000" placeholder="至少 5 个字，分享你的学习体验" placeholder-class="cc-ph" />
+			<view class="cc-anon-row" @click="toggleAnonymous">
+				<text class="cc-checkbox" :class="{ on: isAnonymous }">{{ isAnonymous ? '☑' : '☐' }}</text>
+				<text class="cc-anon-text">匿名展示</text>
+			</view>
+			<text v-if="formError != ''" class="cc-error">{{ formError }}</text>
+			<button class="rc-button cc-submit" hover-class="rc-button-hover" :hover-start-time="20" :hover-stay-time="120" :disabled="submitting" @click="submit">{{ submitting ? '提交中...' : (editing ? '更新评论' : '发布评论') }}</button>
+		</view>
+
+		<view class="cc-list">
+			<view v-if="loading" class="cc-tip"><text>正在加载评论…</text></view>
+			<view v-else-if="items.length == 0" class="cc-tip"><text>还没有评论，来写第一条吧。</text></view>
+			<view v-for="item in items" :key="item.id" class="cc-item">
+				<view class="cc-item-head">
+					<text class="cc-author">{{ commentAuthor(item) }}</text>
+					<text class="cc-item-stars">{{ stars(item.rating) }}</text>
+				</view>
+				<text class="cc-content">{{ item.content }}</text>
+				<text class="cc-time">{{ item.created_at }}</text>
+			</view>
+		</view>
+		<button v-if="page < lastPage" class="rc-button cc-more" hover-class="rc-button-hover" :hover-start-time="20" :hover-stay-time="120" :disabled="loadingMore" @click="loadMore">{{ loadingMore ? '加载中...' : '加载更多' }}</button>
+	</view>
+</template>
+
+<script setup lang="uts">
+	import { getCourseComments, submitCourseComment } from '../api/classroom.uts'
+	import { getUser } from '../stores/auth.uts'
+	import type { CourseComment } from '../types/classroom.uts'
+
+	const props = defineProps({
+		courseId: { type: Number, default: 0 }
+	})
+
+	const starOptions : number[] = [1, 2, 3, 4, 5]
+	const items = ref<CourseComment[]>([])
+	const page = ref(1); const lastPage = ref(1); const total = ref(0); const average = ref(0)
+	const loading = ref(true); const loadingMore = ref(false)
+	const rating = ref(5); const content = ref(''); const isAnonymous = ref(false)
+	const editing = ref(false); const submitting = ref(false); const formError = ref('')
+
+	const averageText = computed(() : string => average.value > 0 ? average.value.toFixed(1) : '')
+
+	function stars(value : number) : string {
+		let result = ''
+		for (let i = 0; i < 5; i++) result += i < value ? '★' : '☆'
+		return result
+	}
+
+	function commentAuthor(item : CourseComment) : string {
+		if (item.is_anonymous || item.user == null) return '匿名学员'
+		const u = item.user!
+		if (u.nick_name != null && u.nick_name != '') return u.nick_name!
+		if (u.real_name != null && u.real_name != '') return u.real_name!
+		if (u.name != null && u.name != '') return u.name!
+		return '学员'
+	}
+
+	function detectMine(list : CourseComment[]) {
+		const user = getUser()
+		if (user == null) return
+		for (let i = 0; i < list.length; i++) {
+			const c = list[i]
+			if (c.user != null && c.user!.id == user!.id) {
+				rating.value = c.rating
+				content.value = c.content
+				isAnonymous.value = c.is_anonymous
+				editing.value = true
+				return
+			}
+		}
+	}
+
+	function load(targetPage : number, append : boolean) {
+		if (props.courseId <= 0) { loading.value = false; return }
+		if (append) loadingMore.value = true; else loading.value = true
+		getCourseComments(props.courseId, targetPage).then((data) => {
+			const list = data.comments.data
+			if (append) {
+				const merged : CourseComment[] = []
+				for (let i = 0; i < items.value.length; i++) merged.push(items.value[i])
+				for (let j = 0; j < list.length; j++) merged.push(list[j])
+				items.value = merged
+			} else {
+				items.value = list
+				detectMine(list)
+			}
+			const perPage = data.comments.per_page > 0 ? data.comments.per_page : 15
+			page.value = data.comments.current_page > 0 ? data.comments.current_page : targetPage
+			lastPage.value = data.comments.last_page > 0 ? data.comments.last_page : Math.max(1, Math.ceil(data.comments.total / perPage))
+			total.value = data.comments.total
+			if (data.summary.average_rating > 0) average.value = data.summary.average_rating
+			loading.value = false; loadingMore.value = false
+		}).catch(() => { loading.value = false; loadingMore.value = false })
+	}
+
+	function loadMore() { if (loadingMore.value || page.value >= lastPage.value) return; load(page.value + 1, true) }
+
+	function setRating(value : number) { rating.value = value }
+	function toggleAnonymous() { isAnonymous.value = !isAnonymous.value }
+
+	function submit() {
+		if (submitting.value) return
+		const text = content.value.trim()
+		if (rating.value < 1) { formError.value = '请选择评分'; return }
+		if (text.length < 5) { formError.value = '评论至少 5 个字'; return }
+		if (text.length > 1000) { formError.value = '评论最多 1000 个字'; return }
+		formError.value = ''
+		submitting.value = true
+		submitCourseComment(props.courseId, rating.value, text, isAnonymous.value).then(() => {
+			submitting.value = false
+			uni.showToast({ title: editing.value ? '评论已更新' : '评论已提交', icon: 'success' })
+			editing.value = true
+			load(1, false)
+		}).catch((err : any | null) => {
+			submitting.value = false
+			const cause = err as Error | null
+			formError.value = (cause == null || cause!.message == '') ? '评论提交失败' : cause!.message
+		})
+	}
+
+	onMounted(() => { load(1, false) })
+</script>
+
+<style scoped>
+	.cc-card{margin:0 16px 20px;padding:18px;border-radius:15px;background:#fff}
+	.cc-head{flex-direction:row;justify-content:space-between;align-items:center}
+	.cc-title{font-size:17px;font-weight:700;color:#243a32}
+	.cc-summary{font-size:12px;color:#d18a32}
+	.cc-form{margin-top:14px;padding:14px;border-radius:12px;background:#F5F7FA}
+	.cc-rating-row{flex-direction:row;align-items:center}
+	.cc-label{font-size:12px;color:#5a6b64}
+	.cc-stars-input{margin-left:10px;flex-direction:row}
+	.cc-star-input{font-size:22px;color:#c3ccc7;margin-right:4px}
+	.cc-star-input.on{color:#FFA500}
+	.cc-textarea{width:100%;height:80px;margin-top:10px;padding:10px;border-radius:10px;background:#fff;font-size:13px;color:#33453e}
+	.cc-ph{color:#a7b0ac}
+	.cc-anon-row{margin-top:12px;flex-direction:row;align-items:center}
+	.cc-checkbox{font-size:16px;color:#c3ccc7}
+	.cc-checkbox.on{color:#0F62FE}
+	.cc-anon-text{margin-left:7px;font-size:12px;color:#5a6b64}
+	.cc-error{margin-top:10px;font-size:11px;color:#e0524d}
+	.cc-submit{margin-top:14px;height:40px;line-height:40px;border-radius:20px;background:#0F62FE;color:#fff;font-size:13px}
+	.cc-list{margin-top:6px}
+	.cc-tip{padding:22px;align-items:center;color:#99a29e;font-size:12px}
+	.cc-item{padding:14px 0;border-bottom:1px solid #f0f2f1}
+	.cc-item-head{flex-direction:row;justify-content:space-between;align-items:center}
+	.cc-author{font-size:13px;font-weight:600;color:#3b4c45}
+	.cc-item-stars{color:#FFA500;font-size:12px}
+	.cc-content{margin-top:8px;font-size:13px;color:#55635e;line-height:20px}
+	.cc-time{margin-top:7px;font-size:9px;color:#a1aaa6}
+	.cc-more{margin-top:14px;height:38px;line-height:38px;border-radius:19px;background:#E8F0FE;color:#0F62FE;font-size:12px}
+</style>

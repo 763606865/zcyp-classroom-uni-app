@@ -1,5 +1,5 @@
 import { request } from '../services/http.uts'
-import type { ClassroomHome, ClassroomOrder, CourseComments, CourseInteractions, CoursePage, CourseProgressDetail, CourseProgressUpdate, CreateOrderResult, LiveSessionDetail, PayOrderResult, TrainingDetail, TrainingPage, VodPlayAuth } from '../types/classroom.uts'
+import type { ClassroomHome, ClassroomOrder, CourseComments, CourseInteractions, CoursePage, CourseProgressDetail, CourseProgressUpdate, Courseware, CreateOrderResult, LiveSessionDetail, PayOrderResult, SubmitCommentResult, TrainingDetail, TrainingPage, VodPlayAuth } from '../types/classroom.uts'
 
 export function getClassroomHome() : Promise<ClassroomHome> {
 	return request<ClassroomHome>('/api/classroom/home', 'GET', null, false)
@@ -41,8 +41,16 @@ export function setCourseLike(courseId : number, liked : boolean) : Promise<Cour
 	return request<CourseInteractions>(`/api/me/courses/${courseId}/like`, liked ? 'POST' : 'DELETE', {})
 }
 
-export function getCourseComments(courseId : number) : Promise<CourseComments> {
-	return request<CourseComments>(`/api/classroom/courses/${courseId}/comments`, 'GET', { per_page: 20 }, false)
+export function getCourseComments(courseId : number, page : number = 1) : Promise<CourseComments> {
+	return request<CourseComments>(`/api/classroom/courses/${courseId}/comments`, 'GET', { per_page: 15, page: page }, false)
+}
+
+export function submitCourseComment(courseId : number, rating : number, content : string, isAnonymous : boolean) : Promise<SubmitCommentResult> {
+	return request<SubmitCommentResult>(`/api/me/courses/${courseId}/comment`, 'POST', { rating: rating, content: content, is_anonymous: isAnonymous })
+}
+
+export function getCoursewares(courseId : number) : Promise<Courseware[]> {
+	return request<Courseware[]>(`/api/me/courses/${courseId}/coursewares`, 'GET', null, true)
 }
 
 export function recordCourseShare(courseId : number, channel : string = 'link') : Promise<any> {

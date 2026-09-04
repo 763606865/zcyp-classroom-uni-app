@@ -1,0 +1,99 @@
+<template>
+	<view v-if="visible" class="cw-card">
+		<text class="cw-title">课程课件</text>
+		<view v-for="item in items" :key="item.id" class="cw-row">
+			<view class="cw-main">
+				<text class="cw-name">{{ item.title }}</text>
+				<text v-if="metaText(item) != ''" class="cw-meta">{{ metaText(item) }}</text>
+				<text v-if="item.description != null && item.description != ''" class="cw-desc">{{ item.description }}</text>
+			</view>
+			<button v-if="canDownload(item)" class="rc-button cw-btn" hover-class="rc-button-hover" :hover-start-time="20" :hover-stay-time="120" @click="download(item)">下载</button>
+			<view v-else class="cw-btn cw-btn-disabled"><text class="cw-btn-lock">{{ lockLabel(item) }}</text></view>
+		</view>
+	</view>
+</template>
+
+<script setup lang="uts">
+	import { getCoursewares } from '../api/classroom.uts'
+	import { openCourseware, resolveFileType } from '../services/download.uts'
+	import type { Courseware } from '../types/classroom.uts'
+
+	const props = defineProps({
+		courseId: { type: Number, default: 0 },
+		lessonId: { type: Number, default: 0 }
+	})
+
+	const allItems = ref<Courseware[]>([])
+	const loading = ref(true)
+
+	// 课件与课时绑定：仅展示当前课时（lesson.id === lessonId）的课件
+	const items = computed(() : Courseware[] => {
+		const result : Courseware[] = []
+		for (let i = 0; i < allItems.value.length; i++) {
+			const it = allItems.value[i]
+			if (it.lesson != null && it.lesson!.id == props.lessonId) result.push(it)
+		}
+		return result
+	})
+	const visible = computed(() : boolean => !loading.value && items.value.length > 0)
+
+	function load() {
+		if (props.courseId <= 0) { loading.value = false; return }
+		loading.value = true
+		getCoursewares(props.courseId).then((data) => { allItems.value = data; loading.value = false }).catch(() => { allItems.value = []; loading.value = false })
+	}
+
+	function formatFileSize(bytes : number | null) : string {
+		if (bytes == null || bytes! <= 0) return ''
+		const b = bytes!
+		if (b < 1024) return `${b} B`
+		if (b < 1024 * 1024) return `${(b / 1024).toFixed(1)} KB`
+		return `${(b / (1024 * 1024)).toFixed(1)} MB`
+	}
+
+	function priceLabel(item : Courseware) : string {
+		if (item.acquisition_type != 'paid') return '免费'
+		const price = (item.price == null || item.price == '') ? '' : `¥${item.price}`
+		return price == '' ? '付费' : price
+	}
+
+	function canDownload(item : Courseware) : boolean {
+		return item.download_url != null && item.download_url != '' && item.can_acquire != false
+	}
+
+	function lockLabel(item : Courseware) : string {
+		if (item.acquisition_type == 'paid' && (item.requires_purchase || !canDownload(item))) return `${priceLabel(item)} 未购买`
+		return '暂不可下载'
+	}
+
+	function metaText(item : Courseware) : string {
+		const parts : string[] = []
+		if (item.file_type != null && item.file_type != '') parts.push(item.file_type!.toUpperCase())
+		const size = formatFileSize(item.file_size)
+		if (size != '') parts.push(size)
+		if (item.original_name != null && item.original_name != '' && item.original_name != item.title) parts.push(item.original_name!)
+		const price = priceLabel(item)
+		parts.push(price)
+		return parts.join(' · ')
+	}
+
+	function download(item : Courseware) {
+		const url = item.download_url == null ? '' : item.download_url!
+		openCourseware(url, resolveFileType(item.file_type, item.original_name, url))
+	}
+
+	onMounted(() => { load() })
+</script>
+
+<style scoped>
+	.cw-card{margin:14px 16px;padding:18px;border-radius:15px;background:#fff}
+	.cw-title{font-size:16px;font-weight:700;color:#2c4038}
+	.cw-row{margin-top:12px;padding:12px;border-radius:11px;background:#F5F7FA;flex-direction:row;align-items:center}
+	.cw-main{flex:1}
+	.cw-name{font-size:14px;color:#33453e;font-weight:600}
+	.cw-meta{margin-top:5px;font-size:10px;color:#919b97}
+	.cw-desc{margin-top:6px;font-size:11px;color:#697771;line-height:17px}
+	.cw-btn{width:76px;height:34px;line-height:34px;margin-left:10px;border-radius:17px;background:#0F62FE;color:#fff;font-size:12px;text-align:center}
+	.cw-btn-disabled{background:#c9d4e8;align-items:center;justify-content:center}
+	.cw-btn-lock{color:#fff;font-size:11px}
+</style>

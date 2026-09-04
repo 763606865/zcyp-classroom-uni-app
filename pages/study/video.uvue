@@ -14,6 +14,7 @@
 
 				<view class="progress-card"><view class="progress-head"><text class="progress-title">学习进度</text><text class="progress-number">{{ progressPercent }}%</text></view><view class="progress-track"><view class="progress-value" :style="{ width: progressPercent + '%' }" /></view><view class="progress-detail"><text>已学习 {{ durationText(currentSeconds) }}</text><text>总时长 {{ durationText(lesson!.duration_seconds) }}</text></view><text class="progress-tip">播放中每隔约 15 秒自动保存，达到课程要求后自动完成。</text></view>
 
+				<CoursewarePanel :course-id="courseId" :lesson-id="lessonId" />
 				<ClassChat :course-id="courseId" />
 				<view class="bottom-space" />
 			</scroll-view>
@@ -23,6 +24,7 @@
 
 <script setup lang="uts">
 	import ClassChat from '../../components/ClassChat.uvue'
+	import CoursewarePanel from '../../components/CoursewarePanel.uvue'
 	import RcNavBar from '../../components/RcNavBar.uvue'
 	import { getCourseProgress, getLessonPlayAuth, updateLessonProgress } from '../../api/classroom.uts'
 	import type { CourseLesson, CourseProgressDetail, VodPlayAuth } from '../../types/classroom.uts'
